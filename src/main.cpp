@@ -40,7 +40,7 @@ void loop() {
     GPSSerial.write(c);
   }
   if (GPSSerial.available()) {
-    Serial.println("GPSSerial.available()==TRUE");
+//    Serial.println("GPSSerial.available()==TRUE");
     char c = GPSSerial.read();
     Serial.write(c);
   }
