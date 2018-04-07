@@ -40,21 +40,19 @@ void setup(){
   digitalWrite(RFM95_RST, HIGH);
   Blink_(LED,50,2);
   Serial.begin(9600);
-  while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
+//  while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
   Blink_(LED,50,1);
   Serial.println("setup() START");
   GPS.begin(9600);
-  delay(1000);
+  delay(100);
   mySerial.begin(9600);
-  delay(1000);
+  delay(100);
   mySerial.println(PMTK_Q_RELEASE);
   GPS.sendCommand(PGCMD_ANTENNA);
   Serial.println("BNO config");
-
   if (not bno.begin()){
     Serial.println('Failed to initialize BNO055! Is the sensor connected?');}
   Serial.println("BME config");
-
   int number=bme.begin(&Wire1);//Pas d'erreur là...
   if (not number){
     Serial.print('Failed to initialize BME280! Is the sensor connected?');Serial.println(number);}
@@ -68,6 +66,7 @@ void setup(){
   while(not rf95.init()){
     Serial.println("LoRa radio int failed");
   }
+
   if (!rf95.setFrequency(RFM95_FREQ)){
     Serial.println("setFrequency failed");
   }
@@ -78,7 +77,7 @@ void setup(){
   rf95.setTxPower(23, false);
 
   Serial.println("setup() END");
-
+  Blink_(LED,50,3);
 }
 
 void loop() {
