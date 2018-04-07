@@ -21,9 +21,9 @@ RH_RF69 rf69(RFM69_CS, RFM69_IRQ);
 int16_t packetnum = 0;  // packet counter, we increment per xmission
 void Blink(int PIN, int DELAY_MS, int loops) {
   for (int i=0; i<loops; i++)  {
-    digitalWrite(PIN,0);
-    delay(DELAY_MS);
     digitalWrite(PIN,1);
+    delay(DELAY_MS);
+    digitalWrite(PIN,0);
     delay(DELAY_MS);
   }
 }//To be added in a separate utility file
