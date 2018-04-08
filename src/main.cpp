@@ -13,7 +13,7 @@
 #define mySerial Serial1
 Adafruit_GPS GPS(&mySerial);
 #define GPSECHO  true
-/* BNO DEFINES */
+/* BNO DEFINES */ // Add High G as : https://forums.adafruit.com/viewtopic.php?f=19&t=120348
 Adafruit_BNO055 bno;
 /* RF DEFINES */
 #define RFM95_CS      9
