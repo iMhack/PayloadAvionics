@@ -17,6 +17,7 @@
 //Adafruit_GPS GPS(&mySerial);
 static const uint32_t GPSBaud = 4800;
 TinyGPSPlus gps;
+bool gps_sentence_decoded=false;
 
 /* BNO DEFINES */ // Add High G as : https://forums.adafruit.com/viewtopic.php?f=19&t=120348
 Adafruit_BNO055 bno;
@@ -77,80 +78,46 @@ void setup()
 
 void loop()
 {
-  //loopRF();
+  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  imu::Vector<3> magneto = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+  imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  imu::Vector<3> lineacc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+  imu::Vector<3> grav = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
+  displayInfo(bno);
 
-  /* Get a new sensor event */
-  sensors_event_t event;
-  bno.getEvent(&event);
+  float pres = bme.readPressure();
+  float temp = bme.readTemperature();
+  float hum = bme.readHumidity();
+  displayInfo(bme);
 
-  /* Display the floating point data */
-  Serial.print("X: ");
-  Serial.print(event.orientation.x, 4);
-  Serial.print("\tY: ");
-  Serial.print(event.orientation.y, 4);
-  Serial.print("\tZ: ");
-  Serial.print(event.orientation.z, 4);
-  Serial.println("");
-
-  Serial.print("Temperature: ");
-  Serial.print(bme.readTemperature());
-  Serial.print("\tPressure: ");
-  Serial.print(bme.readPressure());
-  Serial.print("\tHumidity: ");
-  Serial.print(bme.readHumidity());
-  Serial.println("");
-
-  while (Serial1.available() > 0)
-    if (gps.encode(Serial1.read()))
-      displayInfo(gps);
-
+  while (Serial1.available() > 0){
+    char c = Serial1.read();
+    if (gps.encode(c)){
+      gps_sentence_decoded=true;
+      Blink_(LED,5,1);
+    }
+  }
+  if(gps_sentence_decoded){//Note for GS : same gps as your
+    displayInfo(gps);//Print on USB Serial
+  }
   if (millis() > 5000 && gps.charsProcessed() < 10)
     {
       Serial.println(F("No GPS detected: check wiring."));
-      while(true);
+      //while(true);
     }
-  // Send a message to rf95_server
-/*
-  Serial.println("Sending to rf95_server");
+
   char radiopacket[20] = "Hello World #      ";
   itoa(packetnum++, radiopacket + 13, 10);
   Serial.print("Sending ");
   Serial.println(radiopacket);
   radiopacket[19] = 0;
-
   Serial.println("Sending...");
   delay(10);
   rf95.send((uint8_t *)radiopacket, 20);
-
-  Serial.println("Waiting for packet to complete...");
-  delay(10);
-  if(rf95.waitPacketSent()){Serial.print("Error sending packet !");}//Is too too long !
-  // Now wait for a reply
-  uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-  uint8_t len = sizeof(buf);
-
-  Serial.println("Waiting for reply...");
-  delay(10);
-  if (rf95.waitAvailableTimeout(1000))
-  {
-    // Should be a reply message for us now
-    if (rf95.recv(buf, &len))
-    {
-      Serial.print("Got reply: ");
-      Serial.println((char *)buf);
-      Serial.print("RSSI: ");
-      Serial.println(rf95.lastRssi(), DEC);
-    }
-    else
-    {
-      Serial.println("Receive failed");
-    }
-  }
-  else
-  {
-    Serial.println("No reply, is there a listener around?");
-  }
-*/
+//  delay(10);
+//  if(rf95.waitPacketSent()){Serial.print("Error sending packet !");}//Is too too long !
+//*/
   delay(1000);
 
 }

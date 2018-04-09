@@ -11,6 +11,8 @@ void Blink_(int PIN, int DELAY_MS, int loops)
   }
 }
 
+
+
 void displayInfo(TinyGPSPlus &gps)
 {
   Serial.print(F("Location: "));
@@ -64,6 +66,36 @@ void displayInfo(TinyGPSPlus &gps)
   }
 
   Serial.println();
+}
+
+void displayInfo(Adafruit_BNO055 &bno){
+
+  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  Serial.print("aX: ");
+  Serial.print(accel[0]);
+  Serial.print("\taY: ");
+  Serial.print(accel[1]);
+  Serial.print("\taZ: ");
+  Serial.print(accel[2]);
+  Serial.println("");
+  /*
+  imu::Vector<3> magneto = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+  imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  imu::Vector<3> lineacc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+  imu::Vector<3> grav = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
+  */
+}
+
+void displayInfo(Adafruit_BME280 &bme){
+  Serial.print("Temperature: ");
+  Serial.print(bme.readTemperature());
+  Serial.print("\tPressure: ");
+  Serial.print(bme.readPressure());
+  Serial.print("\tHumidity: ");
+  Serial.print(bme.readHumidity());
+  Serial.println("");
+
 }
 /*
 void smartDelay(unsigned long ms)
