@@ -26,6 +26,7 @@ Adafruit_BNO055 bno;
 #define RFM95_INT 29
 #define RFM95_RST 24
 #define RFM95_FREQ 433.0
+#define EN_RF 8
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 int16_t packetnum = 0;
 /* BME DEFINES */
@@ -34,8 +35,17 @@ Adafruit_BME280 bme;
 void setup()
 {
   pinMode(LED, OUTPUT);
+  pinMode(EN_RF, OUTPUT);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
+  digitalWrite(RFM95_RST, LOW);
+  digitalWrite(EN_RF, HIGH);
+//  digitalWrite(EN_RF, HIGH);
+  /*
+  SPI.setSCK(13);
+  SPI.setMISO(12);
+  SPI.setMOSI(11);
+  */
   Blink_(LED, 50, 2);
   Serial.begin(9600);
   while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
@@ -95,7 +105,6 @@ void loop()
     char c = Serial1.read();
     if (gps.encode(c)){
       gps_sentence_decoded=true;
-      Blink_(LED,5,1);
     }
   }
   if(gps_sentence_decoded){//Note for GS : same gps as your
@@ -106,7 +115,7 @@ void loop()
       Serial.println(F("No GPS detected: check wiring."));
       //while(true);
     }
-
+//*/
   char radiopacket[20] = "Hello World #      ";
   itoa(packetnum++, radiopacket + 13, 10);
   Serial.print("Sending ");
@@ -114,10 +123,13 @@ void loop()
   radiopacket[19] = 0;
   Serial.println("Sending...");
   delay(10);
+  if(rf95.waitPacketSent()){Serial.println("Error sending packet !");}//Is too too long !
+
   rf95.send((uint8_t *)radiopacket, 20);
-//  delay(10);
-//  if(rf95.waitPacketSent()){Serial.print("Error sending packet !");}//Is too too long !
+  delay(10);
+  Blink_(LED,25,1);
+
 //*/
-  delay(1000);
+  delay(3000);
 
 }
