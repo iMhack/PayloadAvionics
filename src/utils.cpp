@@ -105,11 +105,19 @@ void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_
   write32u(datagramSeqNumber++);//Sequence number
   write8(TELEMETRY_ERT18);//Payload type
   write8(CONTROL_FLAG);//Control flag
-  Serial.println("TableInHex");
-  Serial.println(accel[2]);
+//  Serial.println("TableInHex");
+//  Serial.println(accel[2]);
   write32f(accel[0]);
   write32f(accel[1]);
   write32f(accel[2]);
+  write32f(euler[0]);
+  write32f(euler[1]);
+  write32f(euler[2]);
+  write32f(baro.temperature);
+  write32f(baro.pressure);
+  Serial.println("TestingHex, pressure is");
+  Serial.println(baro.pressure);
+
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i],HEX);
   }Serial.println();
@@ -121,20 +129,20 @@ inline void write8 (uint8_t v){
 }
 
 inline void write16 (uint16_t v){
-  datas[currentPos++]=(v&0xFF00) >> 8;
   datas[currentPos++]=(v&0x00FF) >> 0;
+  datas[currentPos++]=(v&0xFF00) >> 8;
 }
 
 inline void write32u (uint32_t v){
-  datas[currentPos++]=(v&0xFF000000) >> 24;
-  datas[currentPos++]=(v&0x00FF0000) >> 16;
-  datas[currentPos++]=(v&0x0000FF00) >> 8;
   datas[currentPos++]=(v&0x000000FF) >> 0;
+  datas[currentPos++]=(v&0x0000FF00) >> 8;
+  datas[currentPos++]=(v&0x00FF0000) >> 16;
+  datas[currentPos++]=(v&0xFF000000) >> 24;
 }
 
 inline void write32f (float v){
   uint8_t *p = (uint8_t*)&v;
-  for(int i = 0; i<4; i++){
+  for(int i = 3; i>=0; i--){
     datas[currentPos++]=p[i];//Sequence number
   }
 }
