@@ -87,19 +87,6 @@ void setup()
 
 void loop()
 {
-  imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  imu::Vector<3> magneto = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
-  imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-  imu::Vector<3> lineacc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
-  imu::Vector<3> grav = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
-  displayInfo(bno);
-
-  float pres = bme.readPressure();
-  float temp = bme.readTemperature();
-  float hum = bme.readHumidity();
-  displayInfo(bme);
-
   while (Serial1.available() > 0){
     char c = Serial1.read();
     if (gps.encode(c)){
@@ -115,14 +102,16 @@ void loop()
       //while(true);
     }
 //*/
+  BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure(), bme.readPressure()};//False for last one
+  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0);
   char radiopacket[20] = "Hello World #      ";
-  //itoa(datagramSeqNumber++, radiopacket + 13, 10);
+  itoa(datagramSeqNumber, radiopacket + 13, 10);
   Serial.print("Sending ");
   Serial.println(radiopacket);
   radiopacket[19] = 0;
   Serial.println("Sending...");
   delay(10);
-  if(rf95.waitPacketSent()){Serial.println("Error sending packet !");}//Is too too long !
+//  if(rf95.waitPacketSent()){Serial.println("Error sending packet !");}//Is too too long !
 
   rf95.send((uint8_t *)radiopacket, 20);
   delay(10);

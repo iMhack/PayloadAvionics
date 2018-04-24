@@ -106,12 +106,12 @@ void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_
   write8(TELEMETRY_ERT18);//Payload type
   write8(CONTROL_FLAG);//Control flag
   Serial.println("TableInHex");
-  Serial.println(accel[0]);
+  Serial.println(accel[2]);
   write32f(accel[0]);
   write32f(accel[1]);
   write32f(accel[2]);
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
-    Serial.print(datas[i]);
+    Serial.print(datas[i],HEX);
   }Serial.println();
   return 0;
 }
