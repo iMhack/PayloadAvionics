@@ -6,7 +6,6 @@
 #include <Adafruit_BME280.h>
 #include <RH_RF95.h>
 #include <TinyGPS++.h>
-
 #include <utils.h>
 
 #define LED 2
@@ -28,7 +27,7 @@ Adafruit_BNO055 bno;
 #define RFM95_FREQ 433.0
 #define EN_RF 8
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
-int16_t packetnum = 0;
+extern uint32_t datagramSeqNumber = 0;
 /* BME DEFINES */
 Adafruit_BME280 bme;
 
@@ -117,7 +116,7 @@ void loop()
     }
 //*/
   char radiopacket[20] = "Hello World #      ";
-  itoa(packetnum++, radiopacket + 13, 10);
+  //itoa(datagramSeqNumber++, radiopacket + 13, 10);
   Serial.print("Sending ");
   Serial.println(radiopacket);
   radiopacket[19] = 0;

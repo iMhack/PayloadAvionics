@@ -1,17 +1,17 @@
 #include <utils.h>
 
+extern uint32_t datagramSeqNumber;
+
 void Blink_(int PIN, int DELAY_MS, int loops)
-{
+{/*
   for (int i = 0; i < loops; i++)
   {
     digitalWrite(PIN, 1);
     threads.delay(DELAY_MS);
     digitalWrite(PIN, 0);
     delay(DELAY_MS);
-  }
+  }*/
 }
-
-
 
 void displayInfo(TinyGPSPlus &gps)
 {
@@ -26,7 +26,6 @@ void displayInfo(TinyGPSPlus &gps)
   {
     Serial.print(F("INVALID"));
   }
-
   Serial.print(F("  Date/Time: "));
   if (gps.date.isValid())
   {
@@ -40,7 +39,6 @@ void displayInfo(TinyGPSPlus &gps)
   {
     Serial.print(F("INVALID"));
   }
-
   Serial.print(F(" "));
   if (gps.time.isValid())
   {
@@ -64,7 +62,6 @@ void displayInfo(TinyGPSPlus &gps)
   {
     Serial.print(F("INVALID"));
   }
-
   Serial.println();
 }
 
@@ -95,85 +92,49 @@ void displayInfo(Adafruit_BME280 &bme){
   Serial.print("\tHumidity: ");
   Serial.print(bme.readHumidity());
   Serial.println("");
-
 }
-/*
-void smartDelay(unsigned long ms)
+
+
+uint8_t datas[SENSOR_PACKET_SIZE];
+int currentPos = 0;
+
+void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time)
 {
-  unsigned long start = millis();
-  do
-  {
-    while (ss.available())
-      gps.encode(ss.read());
-  } while (millis() - start < ms);
-}
-*/
-// static void printFloat(float val, bool valid, int len, int prec)
-// {
-//   if (!valid)
-//   {
-//     while (len-- > 1)
-//       Serial.print('*');
-//     Serial.print(' ');
-//   }
-//   else
-//   {
-//     Serial.print(val, prec);
-//     int vi = abs((int)val);
-//     int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-//     flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-//     for (int i = flen; i < len; ++i)
-//       Serial.print(' ');
-//   }
-//   smartDelay(0);
-// }
-
-void printInt(unsigned long val, bool valid, int len)
-{
-  char sz[32] = "*****************";
-  if (valid)
-    sprintf(sz, "%ld", val);
-  sz[len] = 0;
-  for (int i = strlen(sz); i < len; ++i)
-    sz[i] = ' ';
-  if (len > 0)
-    sz[len - 1] = ' ';
-  Serial.print(sz);
-  smartDelay(0);
+  currentPos = 0;
+  for(; currentPos<3; currentPos++){ write8(HEADER_PREAMBLE_FLAG);}//Preamble flags
+  write32u(datagramSeqNumber++);//Sequence number
+  write8(TELEMETRY_ERT18);//Payload type
+  write8(CONTROL_FLAG);//Control flag
+  Serial.println("TableInHex");
+  Serial.println(accel[0]);
+  write32f(accel[0]);
+  write32f(accel[1]);
+  write32f(accel[2]);
+  for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
+    Serial.print(datas[i]);
+  }Serial.println();
+  return 0;
 }
 
-// static void printDateTime(TinyGPSDate &d, TinyGPSTime &t)
-// {
-//   if (!d.isValid())
-//   {
-//     Serial.print(F("********** "));
-//   }
-//   else
-//   {
-//     char sz[32];
-//     sprintf(sz, "%02d/%02d/%02d ", d.month(), d.day(), d.year());
-//     Serial.print(sz);
-//   }
+inline void write8 (uint8_t v){
+  datas[currentPos++]=v;
+}
 
-//   if (!t.isValid())
-//   {
-//     Serial.print(F("******** "));
-//   }
-//   else
-//   {
-//     char sz[32];
-//     sprintf(sz, "%02d:%02d:%02d ", t.hour(), t.minute(), t.second());
-//     Serial.print(sz);
-//   }
+inline void write16 (uint16_t v){
+  datas[currentPos++]=(v&0xFF00) >> 8;
+  datas[currentPos++]=(v&0x00FF) >> 0;
+}
 
-//   printInt(d.age(), d.isValid(), 5);
-//   smartDelay(0);
-// }
+inline void write32u (uint32_t v){
+  datas[currentPos++]=(v&0xFF000000) >> 24;
+  datas[currentPos++]=(v&0x00FF0000) >> 16;
+  datas[currentPos++]=(v&0x0000FF00) >> 8;
+  datas[currentPos++]=(v&0x000000FF) >> 0;
+}
 
-// static void printStr(const char *str, int len)
-// {
-//   int slen = strlen(str);
-//   for (int i = 0; i < len; ++i)
-//     Serial.print(i < slen ? str[i] : ' ');
-//   smartDelay(0);
-// }
+inline void write32f (float v){
+  uint8_t *p = (uint8_t*)&v;
+  for(int i = 0; i<4; i++){
+    datas[currentPos++]=p[i];//Sequence number
+  }
+}

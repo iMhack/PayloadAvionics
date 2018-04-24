@@ -2,8 +2,8 @@
 // Created by clement on 18/10/2017.
 //
 
-#ifndef DATA_LOGGER_PIO_DATA_LOGGER_H
-#define DATA_LOGGER_PIO_DATA_LOGGER_H
+#ifndef __MAIN_H__
+#define __MAIN_H__
 
 
 #include <Wire.h>
