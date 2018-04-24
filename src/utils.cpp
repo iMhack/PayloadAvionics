@@ -101,7 +101,7 @@ int currentPos = 0;
 void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time)
 {
   currentPos = 0;
-  for(; currentPos<3; currentPos++){ write8(HEADER_PREAMBLE_FLAG);}//Preamble flags
+  for(int i = 0; i<3;i++){ write8(HEADER_PREAMBLE_FLAG);}//Preamble flags
   write32u(datagramSeqNumber++);//Sequence number
   write8(TELEMETRY_ERT18);//Payload type
   write8(CONTROL_FLAG);//Control flag
