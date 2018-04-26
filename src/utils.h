@@ -11,6 +11,7 @@
 #include <telemetry_protocol.h>
 #include <simpleCRC.h>
 
+#include <string>
 #include <stdint.h>
 
 void Blink_(int PIN, int DELAY_MS, int loops);
@@ -26,6 +27,9 @@ typedef struct
   float altitude;
 } BARO_data;
 void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t *datas);
+
+void* CreateTelemetryDatagram_GPS(float lat,float lng,float altitude,uint32_t measurement_time);
+void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t *datas);
 
 inline void write8 (uint8_t v, uint8_t* datas, int currentPos);
 
