@@ -98,7 +98,6 @@ void displayInfo(Adafruit_BME280 &bme){
 //datagram pour groundstation
 //-----------------------------------------------------------------------------
 
-void* CreateTelemetryDatagram_GPS(float lat, float lng,float altitude,uint32_t measurement_time,  uint8_t * datas){
 //-----------------------------------------------------------------------------
 //preamble setting
 //-----------------------------------------------------------------------------
@@ -154,6 +153,7 @@ return 0;
 }
 
 void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t * datas)
+void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t * datas)
 {
   int currentPos = 0;
   uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;

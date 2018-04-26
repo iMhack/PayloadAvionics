@@ -27,8 +27,8 @@ typedef struct
   float altitude;
 } BARO_data;
 
-void* CreateTelemetryDatagram_GPS(float lat,float lng,float altitude,uint32_t measurement_time);
-void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t *datas);
+void CreateTelemetryDatagram_GPS(float lat,float lng,float altitude,uint32_t measurement_time);
+void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t *datas);
 
 inline void write8 (uint8_t v, uint8_t* datas, int currentPos);
 
