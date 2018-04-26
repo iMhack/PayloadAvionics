@@ -11,6 +11,7 @@
 #include <telemetry_protocol.h>
 #include <simpleCRC.h>
 #include <string>
+#include <sstream>
 #include <stdint.h>
 
 void Blink_(int PIN, int DELAY_MS, int loops);

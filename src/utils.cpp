@@ -128,6 +128,9 @@ Serial.println("lat, lng, altitude :");
 //POURUOI CA NE DETECTE PAS LE FOUTUS STRING
 //string var = lat +" "+ lng +" "+ altitude;
 //Serial.println(var);
+//std::stringstream var;
+//var<<lat<<" "<<lng<<" "<<altitude;
+//Serial.println(var.str());
 
 //-----------------------------------------------------------------------------
 //CHECKSUM
@@ -186,6 +189,9 @@ void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i],HEX);
   }Serial.println();
+
+  return 0;
+
 }
 
 inline void write8 (uint8_t v, uint8_t* datas, int currentPos){
