@@ -101,9 +101,15 @@ int currentPos = 0;
 void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time)
 {
   currentPos = 0;
+  uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;
   for(int i = 0; i<3;i++){ write8(HEADER_PREAMBLE_FLAG);}//Preamble flags
   write32u(datagramSeqNumber++);//Sequence number
   write8(TELEMETRY_ERT18);//Payload type
+  for (int i = currentPos - 5; i < currentPos; i++)
+  {
+    //Calculate checksum for datagram and payload fields
+    datagramCrc = CalculateRemainderFromTable (datas[currentPos+i], datagramCrc);
+  }
   write8(CONTROL_FLAG);//Control flag
 //  Serial.println("TableInHex");
 //  Serial.println(accel[2]);
@@ -115,13 +121,21 @@ void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_
   write32f(euler[2]);
   write32f(baro.temperature);
   write32f(baro.pressure);
+  for (int i = (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE); i < currentPos; i++)
+   {
+     //Calculate checksum for datagram and payload fields
+     datagramCrc = CalculateRemainderFromTable (datas[currentPos + i], datagramCrc);
+   }
+   datagramCrc = FinalizeCRC (datagramCrc);
+  write16 (datagramCrc);
   Serial.println("TestingHex, pressure is");
   Serial.println(baro.pressure);
 
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i],HEX);
   }Serial.println();
-  return 0;
+
+  return datas;
 }
 
 inline void write8 (uint8_t v){
