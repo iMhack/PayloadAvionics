@@ -29,7 +29,7 @@ Adafruit_BNO055 bno;
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 extern uint32_t datagramSeqNumber = 0;
 uint8_t datas[SENSOR_PACKET_SIZE];
-
+uint8_t dataGPS[24];
 
 /* BME DEFINES */
 Adafruit_BME280 bme;
@@ -106,9 +106,13 @@ void loop()
     }
 //*/
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure(), bme.readPressure()};//False for last one
+//  CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),0,dataGPS);
   createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
   Serial.print("Sending ");
-  Serial.println((char*) datas);
+  for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
+    Serial.print(datas[i], HEX);
+  }Serial.println();
+  
   rf95.send(datas, SENSOR_PACKET_SIZE);
   Blink_(LED,25,1);
 
