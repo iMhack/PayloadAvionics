@@ -94,67 +94,61 @@ void displayInfo(Adafruit_BME280 &bme){
   Serial.println("");
 }
 
-
-uint8_t datas[SENSOR_PACKET_SIZE];
-int currentPos = 0;
-
-void* createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time)
+void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_data baro, uint32_t measurement_time, uint8_t * datas)
 {
-  currentPos = 0;
+  int currentPos = 0;
   uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;
-  for(int i = 0; i<3;i++){ write8(HEADER_PREAMBLE_FLAG);}//Preamble flags
-  write32u(datagramSeqNumber++);//Sequence number
-  write8(TELEMETRY_ERT18);//Payload type
+  for(int i = 0; i<3;i++){ write8(HEADER_PREAMBLE_FLAG,datas,currentPos);}//Preamble flags
+  write32u(datagramSeqNumber++,datas,currentPos);//Sequence number
+  write8(TELEMETRY_ERT18,datas,currentPos);//Payload type
   for (int i = currentPos - 5; i < currentPos; i++)
   {
     //Calculate checksum for datagram and payload fields
     datagramCrc = CalculateRemainderFromTable (datas[currentPos+i], datagramCrc);
   }
-  write8(CONTROL_FLAG);//Control flag
+  write8(CONTROL_FLAG,datas,currentPos);//Control flag
 //  Serial.println("TableInHex");
 //  Serial.println(accel[2]);
-  write32f(accel[0]);
-  write32f(accel[1]);
-  write32f(accel[2]);
-  write32f(euler[0]);
-  write32f(euler[1]);
-  write32f(euler[2]);
-  write32f(baro.temperature);
-  write32f(baro.pressure);
+  write32f(accel[0],datas,currentPos);
+  write32f(accel[1],datas,currentPos);
+  write32f(accel[2],datas,currentPos);
+  write32f(euler[0],datas,currentPos);
+  write32f(euler[1],datas,currentPos);
+  write32f(euler[2],datas,currentPos);
+  write32f(baro.temperature,datas,currentPos);
+  write32f(baro.pressure,datas,currentPos);
   for (int i = (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE); i < currentPos; i++)
    {
      //Calculate checksum for datagram and payload fields
      datagramCrc = CalculateRemainderFromTable (datas[currentPos + i], datagramCrc);
    }
    datagramCrc = FinalizeCRC (datagramCrc);
-  write16 (datagramCrc);
+  write16 (datagramCrc,datas,currentPos);
   Serial.println("TestingHex, pressure is");
   Serial.println(baro.pressure);
 
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i],HEX);
   }Serial.println();
-
-  return datas;
 }
 
-inline void write8 (uint8_t v){
+inline void write8 (uint8_t v, uint8_t* datas, int currentPos){
   datas[currentPos++]=v;
 }
 
-inline void write16 (uint16_t v){
+inline void write16 (uint16_t v, uint8_t* datas, int currentPos){
   datas[currentPos++]=(v&0x00FF) >> 0;
   datas[currentPos++]=(v&0xFF00) >> 8;
 }
 
-inline void write32u (uint32_t v){
+inline void write32u (uint32_t v, uint8_t* datas, int currentPos){
   datas[currentPos++]=(v&0x000000FF) >> 0;
   datas[currentPos++]=(v&0x0000FF00) >> 8;
   datas[currentPos++]=(v&0x00FF0000) >> 16;
   datas[currentPos++]=(v&0xFF000000) >> 24;
 }
 
-inline void write32f (float v){
+inline void write32f (float v, uint8_t* datas, int currentPos){
   uint8_t *p = (uint8_t*)&v;
   for(int i = 3; i>=0; i--){
     datas[currentPos++]=p[i];//Sequence number

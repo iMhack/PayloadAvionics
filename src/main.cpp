@@ -28,6 +28,9 @@ Adafruit_BNO055 bno;
 #define EN_RF 8
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 extern uint32_t datagramSeqNumber = 0;
+uint8_t datas[SENSOR_PACKET_SIZE];
+
+
 /* BME DEFINES */
 Adafruit_BME280 bme;
 
@@ -103,7 +106,7 @@ void loop()
     }
 //*/
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure(), bme.readPressure()};//False for last one
-  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0);
+  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
   char radiopacket[20] = "Hello World #      ";
   itoa(datagramSeqNumber, radiopacket + 13, 10);
   Serial.print("Sending ");
@@ -113,7 +116,7 @@ void loop()
   delay(10);
 //  if(rf95.waitPacketSent()){Serial.println("Error sending packet !");}//Is too too long !
 
-  rf95.send((uint8_t *)radiopacket, 20);
+  rf95.send(datas, SENSOR_PACKET_SIZE);
   delay(10);
   Blink_(LED,25,1);
 
