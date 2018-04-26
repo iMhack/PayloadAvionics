@@ -107,17 +107,9 @@ void loop()
 //*/
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure(), bme.readPressure()};//False for last one
   createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
-  char radiopacket[20] = "Hello World #      ";
-  itoa(datagramSeqNumber, radiopacket + 13, 10);
   Serial.print("Sending ");
-  Serial.println(radiopacket);
-  radiopacket[19] = 0;
-  Serial.println("Sending...");
-  delay(10);
-//  if(rf95.waitPacketSent()){Serial.println("Error sending packet !");}//Is too too long !
-
+  Serial.println((char*) datas);
   rf95.send(datas, SENSOR_PACKET_SIZE);
-  delay(10);
   Blink_(LED,25,1);
 
 //*/
