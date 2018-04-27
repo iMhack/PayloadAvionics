@@ -3,14 +3,14 @@
 extern uint32_t datagramSeqNumber;
 
 void Blink_(int PIN, int DELAY_MS, int loops)
-{
+{/*
   for (int i = 0; i < loops; i++)
   {
     digitalWrite(PIN, 1);
     threads.delay(DELAY_MS);
     digitalWrite(PIN, 0);
     delay(DELAY_MS);
-  }
+  }*/
 }
 
 void displayInfo(TinyGPSPlus &gps)
@@ -155,18 +155,18 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
 {
   int currentPos = 0;
   uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;
-  for(int i = 0; i<PREAMBLE_SIZE;i++){write8(HEADER_PREAMBLE_FLAG,datas, currentPos);}//Preamble flags
-  write32u(datagramSeqNumber++,datas,currentPos);//Sequence number
-  write8(TELEMETRY_ERT18,datas,currentPos);//Payload type
-  for (int i = currentPos - 5; i < currentPos; i++)
+  for(int i = 0; i<PREAMBLE_SIZE;i++){write8(HEADER_PREAMBLE_FLAG,datas, currentPos);}//Preamble flags, POS=4
+  write32u(datagramSeqNumber++,datas,currentPos);//Sequence number, POS=4-7 -> 8
+  write8(TELEMETRY_ERT18,datas,currentPos);//Payload type, POS=8 -> 9
+  for (int i = 4; i < currentPos; ++i)
   {
     //Calculate checksum for datagram and payload fields
-    datagramCrc = CalculateRemainderFromTable (datas[currentPos+i], datagramCrc);
+    datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
   }
-  write8(CONTROL_FLAG,datas,currentPos);//Control flag
+  write8(CONTROL_FLAG,datas,currentPos);//Control flag, POS=9, -> 10
 //  Serial.println("TableInHex");
 //  Serial.println(accel[2]);
-  write32u(measurement_time,datas,currentPos);
+  write32u(measurement_time,datas,currentPos);// POS -> 10-13 -> 14
   write32f(accel[0],datas,currentPos);
   write32f(accel[1],datas,currentPos);
   write32f(accel[2],datas,currentPos);
@@ -175,10 +175,10 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
   write32f(euler[2],datas,currentPos);
   write32f(baro.temperature,datas,currentPos);
   write32f(baro.pressure,datas,currentPos);
-  for (int i = (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE); i < currentPos; i++)
+  for (int i = 10; i < currentPos; ++i)
    {
      //Calculate checksum for datagram and payload fields
-     datagramCrc = CalculateRemainderFromTable (datas[currentPos + i], datagramCrc);
+     datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
    }
    datagramCrc = FinalizeCRC (datagramCrc);
   write16 (datagramCrc,datas,currentPos);
@@ -203,7 +203,7 @@ inline void write32u (uint32_t v, uint8_t* datas, int &currentPos){
 
 inline void write32f (float v, uint8_t* datas, int &currentPos){
   uint8_t *p = (uint8_t*)&v;
-  for(int i = 0; i<4; i++){
-    datas[currentPos++]=p[i];//Sequence number
+  for(int i = 3; i>=0; i--){
+    datas[currentPos++]=p[i];
   }
 }

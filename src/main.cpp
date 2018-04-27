@@ -105,9 +105,9 @@ void loop()
       //while(true);
     }
 //*/
-  BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure(), bme.readPressure()};//False for last one
+  BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
 //  CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),0,dataGPS);
-  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER),bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
+  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER)/9.81,bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
   Serial.print("Sending ");
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i], HEX);
@@ -117,6 +117,6 @@ void loop()
   Blink_(LED,25,1);
 
 //*/
-  delay(3000);
+  delay(500);
 
 }
