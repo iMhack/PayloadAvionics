@@ -158,10 +158,12 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
   for(int i = 0; i<PREAMBLE_SIZE;i++){write8(HEADER_PREAMBLE_FLAG,datas, currentPos);}//Preamble flags, POS=4
   write32u(datagramSeqNumber++,datas,currentPos);//Sequence number, POS=4-7 -> 8
   write8(TELEMETRY_ERT18,datas,currentPos);//Payload type, POS=8 -> 9
+  Serial.println(datagramCrc,HEX);
   for (int i = 4; i < currentPos; ++i)
   {
     //Calculate checksum for datagram and payload fields
     datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
+    Serial.println(datagramCrc,HEX);
   }
   write8(CONTROL_FLAG,datas,currentPos);//Control flag, POS=9, -> 10
 //  Serial.println("TableInHex");
@@ -179,6 +181,8 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
    {
      //Calculate checksum for datagram and payload fields
      datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
+     Serial.println(datagramCrc,HEX);
+
    }
    datagramCrc = FinalizeCRC (datagramCrc);
   write16 (datagramCrc,datas,currentPos);
