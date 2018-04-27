@@ -51,6 +51,7 @@ void setup()
   Blink_(LED, 50, 2);
   Serial.begin(9600);
   while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+  //while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
   Serial1.begin(9600);
@@ -113,6 +114,7 @@ void loop()
     Serial.print(datas[i], HEX);
   }Serial.println();
   
+
   rf95.send(datas, SENSOR_PACKET_SIZE);
   Blink_(LED,25,1);
 
