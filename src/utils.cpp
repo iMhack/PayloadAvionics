@@ -3,29 +3,29 @@
 extern uint32_t datagramSeqNumber;
 
 void Blink_(int PIN, int DELAY_MS, int loops)
-{//*
+{/*
   for (int i = 0; i < loops; i++)
   {
     digitalWrite(PIN, 1);
     threads.delay(DELAY_MS);
     digitalWrite(PIN, 0);
     delay(DELAY_MS);
-  }//*/
+  }*/
 }
 
 void displayInfo(TinyGPSPlus &gps)
 {
   Serial.print(F("Location: "));
-  if (gps.location.isValid())
-  {
+  /*if (gps.location.isValid())
+  {*/
     Serial.print(gps.location.lat(), 6);
     Serial.print(F(","));
     Serial.print(gps.location.lng(), 6);
-  }
+  /*}
   else
   {
     Serial.print(F("INVALID"));
-  }
+  }*/
   Serial.print(F("  Date/Time: "));
   if (gps.date.isValid())
   {
@@ -104,50 +104,60 @@ void CreateTelemetryDatagram_GPS(float lat, float lng,float altitude,uint32_t me
 //-----------------------------------------------------------------------------
   int currentPos = 0;
   uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;
-  for(int i = 0; i<PREAMBLE_SIZE;i++){ write8(HEADER_PREAMBLE_FLAG,datas,currentPos);}//Preamble flags
-  write32u(datagramSeqNumber++,datas,currentPos);//Sequence number
-  write8(TELEMETRY_ERT18,datas,currentPos);//Payload type
+
+  for(int i = 0; i<PREAMBLE_SIZE;i++)
+  {
+     write8(HEADER_PREAMBLE_FLAG,datas,currentPos); //currentPos==4
+  }//Preamble flags
+
+  write32u(datagramSeqNumber++,datas,currentPos);//Sequence number, currentPos==8
+  write8(GPS,datas,currentPos);//Payload type, currentPos==9
+
   for (int i = currentPos - 5; i < currentPos; i++)
   {
     //Calculate checksum for datagram and payload fields
-    datagramCrc = CalculateRemainderFromTable (datas[currentPos+i], datagramCrc);
+    datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
   }
-  write8(CONTROL_FLAG,datas,currentPos);//Control flag
-  //  Serial.println("TableInHex");
-  //  Serial.println(accel[2]);
+//curentPos==9
 
-//-----------------------------------------------------------------------------
-//GPS data
-//-----------------------------------------------------------------------------
+  write8(CONTROL_FLAG,datas,currentPos);//Control flag, currentPos==10
+    //  Serial.println("TableInHex");
+    //  Serial.println(accel[2]);
+  write32u(measurement_time,datas,currentPos);//Timestamp, currentPos==14
 
-write32f(lat,datas,currentPos);
-write32f(lng,datas,currentPos);
-write32f(altitude,datas, currentPos);
-//serial output for checking
-Serial.println("lat, lng, altitude :");
-//POURUOI CA NE DETECTE PAS LE FOUTUS STRING
-//std::stringstream var;
-//var<<lat<<" "<<lng<<" "<<altitude;
-//Serial.println(var.str());
+  //-----------------------------------------------------------------------------
+  //GPS data
+  //-----------------------------------------------------------------------------
+  write8(0,datas,currentPos);//satellite count,currentPos==15
+  write32f(0.0f,datas,currentPos);//rssi, currentpos==19
+  write32f(lat,datas,currentPos);//currentPos==23
+  write32f(lng,datas,currentPos);//currentPos==27
+  write32f(altitude,datas, currentPos);//currentPos==31
+  //serial output for checking
+  /*Serial.println("lat, lng, altitude :");
+  //POURUOI CA NE DETECTE PAS LE FOUTUS STRING
+  std::stringstream var;
+  var<<lat<<" "<<lng<<" "<<altitude;
+  Serial.println(var.str()); */
 
-//-----------------------------------------------------------------------------
-//CHECKSUM
-//-----------------------------------------------------------------------------
+  //-----------------------------------------------------------------------------
+  //CHECKSUM
+  //-----------------------------------------------------------------------------
 
-for (int i = (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE); i < currentPos; i++)
- {
-   //Calculate checksum for datagram and payload fields
-   datagramCrc = CalculateRemainderFromTable (datas[currentPos + i], datagramCrc);
- }
- datagramCrc = FinalizeCRC (datagramCrc);
-write16 (datagramCrc,datas,currentPos);
-
-//-----------------------------------------------------------------------------
-//HEX test
-//-----------------------------------------------------------------------------
-for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
-  Serial.print(datas[i],HEX);
-}Serial.println();
+  for (int i = (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE); i < currentPos; i++)
+   {
+     //Calculate checksum for datagram and payload fields
+     datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
+   }
+   datagramCrc = FinalizeCRC (datagramCrc);
+  write16 (datagramCrc,datas,currentPos);
+  Serial.print("Checksum GPS: ");Serial.print(datagramCrc,HEX); Serial.println();
+  //-----------------------------------------------------------------------------
+  //HEX test
+  //-----------------------------------------------------------------------------
+  for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
+    Serial.print(datas[i],HEX);
+  }Serial.println();
 
 }
 
@@ -158,13 +168,16 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
   for(int i = 0; i<PREAMBLE_SIZE;i++){write8(HEADER_PREAMBLE_FLAG,datas, currentPos);}//Preamble flags, POS=4
   write32u(datagramSeqNumber++,datas,currentPos);//Sequence number, POS=4-7 -> 8
   write8(TELEMETRY_ERT18,datas,currentPos);//Payload type, POS=8 -> 9
-  Serial.println(datagramCrc,HEX);
+  //Serial.println(datagramCrc,HEX);
+
   for (int i = 4; i < currentPos; ++i)
   {
     //Calculate checksum for datagram and payload fields
     datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
-    Serial.println(datagramCrc,HEX);
+    //Serial.println(datagramCrc,HEX);
   }
+
+
   write8(CONTROL_FLAG,datas,currentPos);//Control flag, POS=9, -> 10
 //  Serial.println("TableInHex");
 //  Serial.println(accel[2]);
@@ -177,17 +190,24 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
   write32f(euler[2],datas,currentPos);
   write32f(baro.temperature,datas,currentPos);
   write32f(baro.pressure,datas,currentPos);
+
   for (int i = 10; i < currentPos; ++i)
    {
      //Calculate checksum for datagram and payload fields
      datagramCrc = CalculateRemainderFromTable (datas[i], datagramCrc);
-     Serial.println(datagramCrc,HEX);
+     //Serial.println(datagramCrc,HEX);
 
    }
+
    datagramCrc = FinalizeCRC (datagramCrc);
   write16 (datagramCrc,datas,currentPos);
-  Serial.print("checksum ");Serial.print(datagramCrc,HEX); Serial.println();
+  Serial.print("Checksum telemetry: ");Serial.print(datagramCrc,HEX); Serial.println();
+
 }
+
+//-----------------------------------------------------------------------------
+//write# definition
+//-----------------------------------------------------------------------------
 
 inline void write8 (uint8_t v, uint8_t* datas, int &currentPos){
   datas[currentPos++]=v;

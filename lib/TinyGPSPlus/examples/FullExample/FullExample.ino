@@ -48,7 +48,7 @@ void loop()
     (unsigned long)TinyGPSPlus::distanceBetween(
       gps.location.lat(),
       gps.location.lng(),
-      LONDON_LAT, 
+      LONDON_LAT,
       LONDON_LON) / 1000;
   printInt(distanceKmToLondon, gps.location.isValid(), 9);
 
@@ -56,7 +56,7 @@ void loop()
     TinyGPSPlus::courseTo(
       gps.location.lat(),
       gps.location.lng(),
-      LONDON_LAT, 
+      LONDON_LAT,
       LONDON_LON);
 
   printFloat(courseToLondon, gps.location.isValid(), 7, 2);
@@ -69,7 +69,7 @@ void loop()
   printInt(gps.sentencesWithFix(), true, 10);
   printInt(gps.failedChecksum(), true, 9);
   Serial.println();
-  
+
   smartDelay(1000);
 
   if (millis() > 5000 && gps.charsProcessed() < 10)
@@ -81,7 +81,7 @@ void loop()
 static void smartDelay(unsigned long ms)
 {
   unsigned long start = millis();
-  do 
+  do
   {
     while (ss.available())
       gps.encode(ss.read());
@@ -116,7 +116,7 @@ static void printInt(unsigned long val, bool valid, int len)
   sz[len] = 0;
   for (int i=strlen(sz); i<len; ++i)
     sz[i] = ' ';
-  if (len > 0) 
+  if (len > 0)
     sz[len-1] = ' ';
   Serial.print(sz);
   smartDelay(0);
@@ -134,7 +134,7 @@ static void printDateTime(TinyGPSDate &d, TinyGPSTime &t)
     sprintf(sz, "%02d/%02d/%02d ", d.month(), d.day(), d.year());
     Serial.print(sz);
   }
-  
+
   if (!t.isValid())
   {
     Serial.print(F("******** "));

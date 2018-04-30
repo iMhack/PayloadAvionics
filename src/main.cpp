@@ -1,3 +1,4 @@
+
 #include <TeensyThreads.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -8,9 +9,16 @@
 #include <TinyGPS++.h>
 #include <utils.h>
 
+//-----------------------------------------------------------------------------
+//DEFINE
+//-----------------------------------------------------------------------------
+
 #define LED 2
 
 /* GPS DEFINES */
+//-----------------------------------------------------------------------------
+//GPS
+//-----------------------------------------------------------------------------
 #define GPSSerial Serial1
 #define GPSECHO true
 //Adafruit_GPS GPS(&mySerial);
@@ -18,6 +26,25 @@ static const uint32_t GPSBaud = 4800;
 TinyGPSPlus gps;
 bool gps_sentence_decoded=false;
 
+static void printFloat(float val, bool valid, int len, int prec)
+{
+  if (!valid)
+  {
+    while (len-- > 1)
+      Serial.print('*');
+    Serial.print(' ');
+  }
+  else
+  {
+    Serial.print(val, prec);
+    int vi = abs((int)val);
+    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
+    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
+    for (int i=flen; i<len; ++i)
+      Serial.print(' ');
+  }
+  delay(0);
+}
 /* BNO DEFINES */ // Add High G as : https://forums.adafruit.com/viewtopic.php?f=19&t=120348
 Adafruit_BNO055 bno;
 /* RF DEFINES */
@@ -29,10 +56,14 @@ Adafruit_BNO055 bno;
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 extern uint32_t datagramSeqNumber = 0;
 uint8_t datas[SENSOR_PACKET_SIZE];
-uint8_t dataGPS[24];
-
+uint8_t dataGPS[GPS_PACKET_SIZE];
+elapsedMillis time;
 /* BME DEFINES */
 Adafruit_BME280 bme;
+
+//-----------------------------------------------------------------------------
+//SETUP()
+//-----------------------------------------------------------------------------
 
 void setup()
 {
@@ -88,6 +119,10 @@ void setup()
   Blink_(LED, 50, 3);
 }
 
+//-----------------------------------------------------------------------------
+//LOOP
+//-----------------------------------------------------------------------------
+
 void loop()
 {
   while (Serial1.available() > 0){
@@ -105,18 +140,32 @@ void loop()
       //while(true);
     }
 //*/
+//printFloat(gps.location.lat(), gps.location.isValid(), 11, 6);
+//printFloat(gps.location.lng(), gps.location.isValid(), 12, 6);
+
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
-//  CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),0,dataGPS);
+  CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),time,dataGPS);
   createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER)/9.81,bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
-  Serial.print("Sending ");
+  Serial.println("sending : ");
+
+  Serial.print("gps datagram : ");
+
+  for(int i = 0; i<=GPS_PACKET_SIZE; i++){
+    Serial.print(dataGPS[i], HEX);
+  }Serial.println();
+
+
+  Serial.print("telemetry datagram : ");
+
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i], HEX);
   }Serial.println();
-
-  rf95.send(datas, SENSOR_PACKET_SIZE);
+ rf95.send(datas,sizeof(datas));
+ delay(250);
+ rf95.send(dataGPS, GPS_PACKET_SIZE);
+ Serial.println("end of send telemetry");
   Blink_(LED,25,1);
 
 //*/
-  delay(3500);
-
+  delay(250);
 }
