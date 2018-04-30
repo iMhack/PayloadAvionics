@@ -2,15 +2,17 @@
 
 extern uint32_t datagramSeqNumber;
 
+
+
 void Blink_(int PIN, int DELAY_MS, int loops)
-{/*
+{
   for (int i = 0; i < loops; i++)
   {
     digitalWrite(PIN, 1);
     threads.delay(DELAY_MS);
     digitalWrite(PIN, 0);
     delay(DELAY_MS);
-  }*/
+  }
 }
 
 void displayInfo(TinyGPSPlus &gps)
@@ -103,7 +105,7 @@ void CreateTelemetryDatagram_GPS(float lat, float lng,float altitude,uint32_t me
 //preamble setting
 //-----------------------------------------------------------------------------
   int currentPos = 0;
-  uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;
+  uint16_t datagramCrc = CRC_16_GENERATOR_POLY.initialValue;//checksum initialization
 
   for(int i = 0; i<PREAMBLE_SIZE;i++)
   {

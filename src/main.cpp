@@ -16,35 +16,15 @@
 #define LED 2
 
 /* GPS DEFINES */
-//-----------------------------------------------------------------------------
-//GPS
-//-----------------------------------------------------------------------------
+
 #define GPSSerial Serial1
 #define GPSECHO true
 //Adafruit_GPS GPS(&mySerial);
 static const uint32_t GPSBaud = 4800;
 TinyGPSPlus gps;
+
 bool gps_sentence_decoded=false;
 
-static void printFloat(float val, bool valid, int len, int prec)
-{
-  if (!valid)
-  {
-    while (len-- > 1)
-      Serial.print('*');
-    Serial.print(' ');
-  }
-  else
-  {
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
-      Serial.print(' ');
-  }
-  delay(0);
-}
 /* BNO DEFINES */ // Add High G as : https://forums.adafruit.com/viewtopic.php?f=19&t=120348
 Adafruit_BNO055 bno;
 /* RF DEFINES */
@@ -81,7 +61,7 @@ void setup()
   */
   Blink_(LED, 50, 2);
   Serial.begin(9600);
-  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+  //while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
   Serial1.begin(9600);
@@ -134,6 +114,7 @@ void loop()
   if(gps_sentence_decoded){//Note for GS : same gps as your
     displayInfo(gps);//Print on USB Serial
   }
+
   if (millis() > 5000 && gps.charsProcessed() < 10)
     {
       Serial.println(F("No GPS detected: check wiring."));
@@ -154,12 +135,12 @@ void loop()
     Serial.print(dataGPS[i], HEX);
   }Serial.println();
 
-
   Serial.print("telemetry datagram : ");
 
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i], HEX);
   }Serial.println();
+
  rf95.send(datas,sizeof(datas));
  delay(250);
  rf95.send(dataGPS, GPS_PACKET_SIZE);
