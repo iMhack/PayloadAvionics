@@ -1,6 +1,7 @@
 
 #include <TeensyThreads.h>
 #include <SPI.h>
+#include <SD.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -41,6 +42,15 @@ elapsedMillis time;
 /* BME DEFINES */
 Adafruit_BME280 bme;
 
+/* Telemetry file creation */
+File myFile;
+
+/* Selection of the SD card */
+const int chipSelect = BUILTIN_SDCARD;
+
+/* Buffer for the file name */
+char filename[40];
+
 //-----------------------------------------------------------------------------
 //SETUP()
 //-----------------------------------------------------------------------------
@@ -73,7 +83,11 @@ void setup()
 
   Serial.println("BME config");
   if (not bme.begin(&Wire1))
-    Serial.print("Failed to initialize BME280! Is the sensor connected?");
+    Serial.println("Failed to initialize BME280! Is the sensor connected?");
+
+  Serial.println("SD card config");
+  if (!SD.begin(chipSelect))
+     Serial.println("Failed to initialize SD card! Is it inserted in its slot ?");
 
   /*Start RF */
   Serial.println("RF config");
@@ -94,6 +108,32 @@ void setup()
     Serial.println(RFM95_FREQ);
   }
   rf95.setTxPower(23, false);
+
+  /* Check file */
+
+  int i;
+  sprintf(filename,"%s%i%s","telemetryData",i,".txt");
+  while (SD.exists(filename))
+  {
+    i++;
+    sprintf(filename,"%s%i%s","telemetryData",i,".txt");
+  }
+
+  /* Initialize file */
+
+  myFile = SD.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing 1, 2, 3.");
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening telemetry file");
+  }
 
   Serial.println("setup() END");
   Blink_(LED, 50, 3);
@@ -127,25 +167,33 @@ void loop()
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
   CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),time,dataGPS);
   createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER)/9.81,bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
-  Serial.println("sending : ");
+
+  myFile = SD.open(filename, FILE_WRITE);
+
+  Serial.println("sending and writing : ");
 
   Serial.print("gps datagram : ");
 
   for(int i = 0; i<=GPS_PACKET_SIZE; i++){
     Serial.print(dataGPS[i], HEX);
+    myFile.println(dataGPS[i], HEX);
   }Serial.println();
 
   Serial.print("telemetry datagram : ");
 
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
     Serial.print(datas[i], HEX);
+    myFile.println(datas[i], HEX);
   }Serial.println();
+
+  // close the file:
+  myFile.close();
 
  rf95.send(datas,sizeof(datas));
  delay(250);
  rf95.send(dataGPS, GPS_PACKET_SIZE);
  Serial.println("end of send telemetry");
-  Blink_(LED,25,1);
+ Blink_(LED,25,1);
 
 //*/
   delay(250);
