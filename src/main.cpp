@@ -88,6 +88,11 @@ Serial.println("card initialized.");
   Serial.println("BME config");
   if (not bme.begin(&Wire1))
     Serial.print("Failed to initialize BME280! Is the sensor connected?");
+    Serial.println("Failed to initialize BME280! Is the sensor connected?");
+
+  Serial.println("SD card config");
+  if (!SD.begin(chipSelect))
+     Serial.println("Failed to initialize SD card! Is it inserted in its slot ?");
 
   /*Start RF */
   Serial.println("RF config");
@@ -108,6 +113,32 @@ Serial.println("card initialized.");
     Serial.println(RFM95_FREQ);
   }
   rf95.setTxPower(23, false);
+
+  /* Check file */
+
+  int i;
+  sprintf(filename,"%s%i%s","telemetryData",i,".txt");
+  while (SD.exists(filename))
+  {
+    i++;
+    sprintf(filename,"%s%i%s","telemetryData",i,".txt");
+  }
+
+  /* Initialize file */
+
+  myFile = SD.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing 1, 2, 3.");
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening telemetry file");
+  }
 
   Serial.println("setup() END");
   //-----------------------------------------------------------------------------
@@ -197,7 +228,7 @@ File dataFile = SD.open("datalog.txt", FILE_WRITE);
  delay(250);
  rf95.send(dataGPS, GPS_PACKET_SIZE);
  Serial.println("end of send telemetry");
-  Blink_(LED,25,1);
+ Blink_(LED,25,1);
 
 //*/
   delay(250);

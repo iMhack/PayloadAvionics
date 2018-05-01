@@ -5,14 +5,14 @@ extern uint32_t datagramSeqNumber;
 
 
 void Blink_(int PIN, int DELAY_MS, int loops)
-{
+{/*
   for (int i = 0; i < loops; i++)
   {
     digitalWrite(PIN, 1);
     threads.delay(DELAY_MS);
     digitalWrite(PIN, 0);
     delay(DELAY_MS);
-  }
+  }*/
 }
 
 void displayInfo(TinyGPSPlus &gps)
