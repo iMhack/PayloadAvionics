@@ -24,77 +24,88 @@
 //Adafruit_GPS GPS(&mySerial);
 static const uint32_t GPSBaud = 4800;
 TinyGPSPlus gps;
-
 bool gps_sentence_decoded=false;
 
 /* BNO DEFINES */ // Add High G as : https://forums.adafruit.com/viewtopic.php?f=19&t=120348
+
 Adafruit_BNO055 bno;
+
 /* RF DEFINES */
+
 #define RFM95_CS 9
 #define RFM95_INT 29
 #define RFM95_RST 24
 #define RFM95_FREQ 433.0
 #define EN_RF 8
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
+
+/*DATAGRAM ARRAYS*/
+
 extern uint32_t datagramSeqNumber = 0;
 uint8_t datas[SENSOR_PACKET_SIZE];
 uint8_t dataGPS[GPS_PACKET_SIZE];
 elapsedMillis time;
+
 /* BME DEFINES */
+
 Adafruit_BME280 bme;
 
-/*SD card chipselect*/
+/*SD CARD CHIPSELECT*/
+
 const int chipSelect = BUILTIN_SDCARD;
-/*liftoff bool*/
+
+/*LIFTOFF BOOL*/
+
 bool liftoff=false;
+
 //-----------------------------------------------------------------------------
 //SETUP()
 //-----------------------------------------------------------------------------
 
 void setup()
 {
+
   pinMode(LED, OUTPUT);
   pinMode(EN_RF, OUTPUT);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
   digitalWrite(RFM95_RST, LOW);
   digitalWrite(EN_RF, HIGH);
-//  digitalWrite(EN_RF, HIGH);
+
   /*
   SPI.setSCK(13);
   SPI.setMISO(12);
   SPI.setMOSI(11);
   */
+
   Blink_(LED, 50, 2);
   Serial.begin(9600);
 //  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
 
-//SD card setup()
+/*SD card setup()*/
+
   if (!SD.begin(chipSelect)) {
   Serial.println("Card failed, or not present");
   // don't do anything more:
   return;
-}
-Serial.println("card initialized.");
+}Serial.println("card initialized.");
 
-//  Serial1.println(PMTK_Q_RELEASE);
-//  gps.sendCommand(PGCMD_ANTENNA);
   Serial.println("BNO config");
   if (not bno.begin())
     Serial.println("Failed to initialize BNO055! Is the sensor connected?");
 
   Serial.println("BME config");
   if (not bme.begin(&Wire1))
-    Serial.print("Failed to initialize BME280! Is the sensor connected?");
     Serial.println("Failed to initialize BME280! Is the sensor connected?");
 
   Serial.println("SD card config");
   if (!SD.begin(chipSelect))
      Serial.println("Failed to initialize SD card! Is it inserted in its slot ?");
 
-  /*Start RF */
+  /*START RF */
+
   Serial.println("RF config");
   digitalWrite(RFM95_RST, LOW);
   delay(10);
@@ -114,37 +125,14 @@ Serial.println("card initialized.");
   }
   rf95.setTxPower(23, false);
 
-  /* Check file */
-
-  int i;
-  sprintf(filename,"%s%i%s","telemetryData",i,".txt");
-  while (SD.exists(filename))
-  {
-    i++;
-    sprintf(filename,"%s%i%s","telemetryData",i,".txt");
-  }
-
-  /* Initialize file */
-
-  myFile = SD.open(filename, FILE_WRITE);
-
-  // if the file opened okay, write to it:
-  if (myFile) {
-    Serial.print("Writing to test.txt...");
-    myFile.println("testing 1, 2, 3.");
-    // close the file:
-    myFile.close();
-    Serial.println("done.");
-  } else {
-    // if the file didn't open, print an error:
-    Serial.println("error opening telemetry file");
-  }
-
   Serial.println("setup() END");
-  //-----------------------------------------------------------------------------
-  //acceleration trigger !
-  //-----------------------------------------------------------------------------
-  //  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+
+//-----------------------------------------------------------------------------
+//ACCELERATION TRIGGERS !
+//-----------------------------------------------------------------------------
+
+//  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+
   while(liftoff==false)
     {
       Serial.println("testval : ");
@@ -194,8 +182,8 @@ String dataString = "";
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
   CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),time,dataGPS);
   createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER)/9.81,bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
-  Serial.println("sending : ");
 
+  Serial.println("sending and writing : ");
   Serial.print("gps datagram : ");
 
   for(int i = 0; i<=GPS_PACKET_SIZE; i++){
@@ -229,7 +217,5 @@ File dataFile = SD.open("datalog.txt", FILE_WRITE);
  rf95.send(dataGPS, GPS_PACKET_SIZE);
  Serial.println("end of send telemetry");
  Blink_(LED,25,1);
-
-//*/
-  delay(250);
+ delay(250);
 }
