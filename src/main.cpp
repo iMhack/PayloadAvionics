@@ -1,6 +1,7 @@
 
 #include <TeensyThreads.h>
 #include <SPI.h>
+#include <SD.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -8,6 +9,7 @@
 #include <RH_RF95.h>
 #include <TinyGPS++.h>
 #include <utils.h>
+#include <cmath>
 
 //-----------------------------------------------------------------------------
 //DEFINE
@@ -41,6 +43,10 @@ elapsedMillis time;
 /* BME DEFINES */
 Adafruit_BME280 bme;
 
+/*SD card chipselect*/
+const int chipSelect = BUILTIN_SDCARD;
+/*liftoff bool*/
+bool liftoff=false;
 //-----------------------------------------------------------------------------
 //SETUP()
 //-----------------------------------------------------------------------------
@@ -61,10 +67,18 @@ void setup()
   */
   Blink_(LED, 50, 2);
   Serial.begin(9600);
-  //while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+//  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
-  Serial1.begin(9600);
+
+//SD card setup()
+  if (!SD.begin(chipSelect)) {
+  Serial.println("Card failed, or not present");
+  // don't do anything more:
+  return;
+}
+Serial.println("card initialized.");
+
 //  Serial1.println(PMTK_Q_RELEASE);
 //  gps.sendCommand(PGCMD_ANTENNA);
   Serial.println("BNO config");
@@ -96,7 +110,28 @@ void setup()
   rf95.setTxPower(23, false);
 
   Serial.println("setup() END");
+  //-----------------------------------------------------------------------------
+  //acceleration trigger !
+  //-----------------------------------------------------------------------------
+  //  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+  while(liftoff==false)
+    {
+      Serial.println("testval : ");
+      imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    float testval= accel[0]+accel[1]+accel[2];//summing the acceleration to create an agnostic accelerometer value
+    testval= sqrt(testval);
+    //testval= testval-9.81-2.0;//offseting 1G and about 2m/s
+    //if(testval<0.)testval=0.0;//avoids artificial acceleration increases
+    Serial.println(testval);
+    if(testval>30.0)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
+    {
+      liftoff=true;
+      Serial.println("liftoff!");
+    }
+  }
+
   Blink_(LED, 50, 3);
+
 }
 
 //-----------------------------------------------------------------------------
@@ -121,8 +156,9 @@ void loop()
       //while(true);
     }
 //*/
-//printFloat(gps.location.lat(), gps.location.isValid(), 11, 6);
-//printFloat(gps.location.lng(), gps.location.isValid(), 12, 6);
+
+//datastring for sdcard
+String dataString = "";
 
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
   CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),time,dataGPS);
@@ -132,14 +168,30 @@ void loop()
   Serial.print("gps datagram : ");
 
   for(int i = 0; i<=GPS_PACKET_SIZE; i++){
-    Serial.print(dataGPS[i], HEX);
+        dataString += String(dataGPS[i]);
   }Serial.println();
+  dataString += " | ";
 
   Serial.print("telemetry datagram : ");
 
   for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
-    Serial.print(datas[i], HEX);
+    dataString += String(datas[i]);
   }Serial.println();
+dataString += " - ";
+
+File dataFile = SD.open("datalog.txt", FILE_WRITE);
+
+  // if the file is available, write to it:
+  if (dataFile) {
+    dataFile.println(dataString);
+    dataFile.close();
+    // print to the serial port too:
+    Serial.println(dataString);
+  }
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening datalog.txt");
+  }
 
  rf95.send(datas,sizeof(datas));
  delay(250);
