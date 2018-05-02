@@ -58,12 +58,19 @@ const int chipSelect = BUILTIN_SDCARD;
 
 bool liftoff=false;
 
+/* ACCELERATION BUFFER */
+
+#define ACC_BUFF 3 //number of values used as an acceleration buffer
+double accelerationBuffer[ACC_BUFF] = {0};
+
 //-----------------------------------------------------------------------------
 //SETUP()
 //-----------------------------------------------------------------------------
 
 void setup()
 {
+
+  delay(10000); //10 seconds delay before the setup actually starts allow to display the messages correctly
 
   pinMode(LED, OUTPUT);
   pinMode(EN_RF, OUTPUT);
@@ -84,13 +91,14 @@ void setup()
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
 
-/*SD card setup()*/
+  /*SD card setup()*/
 
+  Serial.println("SD card config");
   if (!SD.begin(chipSelect)) {
-  Serial.println("Card failed, or not present");
+    Serial.println("Card failed, or not present");
   // don't do anything more:
   return;
-}Serial.println("card initialized.");
+  } Serial.println("Card initialized.");
 
   Serial.println("BNO config");
   if (not bno.begin())
@@ -99,10 +107,6 @@ void setup()
   Serial.println("BME config");
   if (not bme.begin(&Wire1))
     Serial.println("Failed to initialize BME280! Is the sensor connected?");
-
-  Serial.println("SD card config");
-  if (!SD.begin(chipSelect))
-     Serial.println("Failed to initialize SD card! Is it inserted in its slot ?");
 
   /*START RF */
 
@@ -135,18 +139,37 @@ void setup()
 
   while(liftoff==false)
     {
-      Serial.println("testval : ");
-      imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    float testval= accel[0]+accel[1]+accel[2];//summing the acceleration to create an agnostic accelerometer value
-    testval= sqrt(testval);
-    //testval= testval-9.81-2.0;//offseting 1G and about 2m/s
-    //if(testval<0.)testval=0.0;//avoids artificial acceleration increases
+    Serial.println("tempval : ");
+    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+    float tempval= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
+    tempval= sqrt(tempval);
+    Serial.println(tempval);
+
+    Serial.println("testval : ");
+
+    for (int i=0;i<ACC_BUFF-1;++i)
+    {
+      accelerationBuffer[i]=accelerationBuffer[i+1]; //values are transferred
+    }
+    accelerationBuffer[ACC_BUFF-1] = tempval; //last value is updated
+
+    float testval = 0;
+    for (int i=0;i<ACC_BUFF;++i)
+    {
+      testval = testval + accelerationBuffer[i]; //values are summed
+    }
+
+    testval = testval / ACC_BUFF;
+
     Serial.println(testval);
+    Serial.println();
+
     if(testval>30.0)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
     {
       liftoff=true;
       Serial.println("liftoff!");
     }
+
   }
 
   Blink_(LED, 50, 3);
