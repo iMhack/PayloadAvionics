@@ -143,6 +143,7 @@ void setup()
     //if(testval<0.)testval=0.0;//avoids artificial acceleration increases
     Serial.println(testval);
     if(testval>30.0)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
+    if(testval>4.0)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
     {
       liftoff=true;
       Serial.println("liftoff!");
