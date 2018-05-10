@@ -45,6 +45,7 @@ extern uint32_t datagramSeqNumber = 0;
 uint8_t datas[SENSOR_PACKET_SIZE];
 uint8_t dataGPS[GPS_PACKET_SIZE];
 elapsedMillis time;
+elapsedMillis sinceAccTest; //time since the last acceleration average
 
 /* BME DEFINES */
 
@@ -58,10 +59,17 @@ const int chipSelect = BUILTIN_SDCARD;
 
 bool liftoff=false;
 
+/*SETUP FAILURE BOOL*/
+
+bool setupFail=false; //boolean remains false unless a setup failure is detected
+
 /* ACCELERATION BUFFER */
 
-#define ACC_BUFF 3 //number of values used as an acceleration buffer
-double accelerationBuffer[ACC_BUFF] = {0};
+unsigned long thresholdLength=500; //length in ms during which the acceleration should be averaged to detect the liftoff
+unsigned int nbAcc=0; //number of accelration values stored in sumAcc during thresholdLength
+float sumAcc=0.0; //initialize the variable that will store the sum of the accelerations during the previous thresholdLength
+float testAcc = 0.0; //average of the accleration over thresholdLength
+float thresholdAcc = 9.81; //threshold on testAcc in m/s^2 (not in Gs !!)
 
 //-----------------------------------------------------------------------------
 //SETUP()
@@ -94,19 +102,25 @@ void setup()
   /*SD card setup()*/
 
   Serial.println("SD card config");
-  if (!SD.begin(chipSelect)) {
+  if (!SD.begin(chipSelect))
+  {
+    setupFail=true;
     Serial.println("Card failed, or not present");
   // don't do anything more:
-  return;
+  // return; //this line makes it directly jumps to loop - use the boolean setupFail instead
   } Serial.println("Card initialized.");
 
   Serial.println("BNO config");
-  if (not bno.begin())
+  if (not bno.begin()) {
+    setupFail=true;
     Serial.println("Failed to initialize BNO055! Is the sensor connected?");
+  }
 
   Serial.println("BME config");
-  if (not bme.begin(&Wire1))
+  if (not bme.begin(&Wire1))  {
+    setupFail=true;
     Serial.println("Failed to initialize BME280! Is the sensor connected?");
+  }
 
   /*START RF */
 
@@ -115,11 +129,14 @@ void setup()
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
-  while (not rf95.init())
+  if (not rf95.init()) {
+    setupFail=true;
     Serial.println("LoRa radio int failed");
+  }
 
   if (!rf95.setFrequency(RFM95_FREQ))
   {
+    setupFail=true;
     Serial.println("setFrequency failed");
   }
   else
@@ -129,6 +146,12 @@ void setup()
   }
   rf95.setTxPower(23, false);
 
+  while(setupFail==true)  //buzzer being extremely annoying when the setup has failed
+  {
+    Blink_(LED, 50, 1);
+    delay(100);
+  }
+
   Serial.println("setup() END");
 
 //-----------------------------------------------------------------------------
@@ -137,32 +160,29 @@ void setup()
 
 //  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
 
+  sinceAccTest = 0; //set it back to 0 before actually starting to measure
+
   while(liftoff==false)
     {
-    Serial.println("tempval : ");
-    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
-    float tempval= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
-    tempval= sqrt(tempval);
-    Serial.println(tempval);
+    Serial.println("tempAcc : ");
+    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); //linear acceleration removes the gravity
+    float tempAcc= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
+    tempAcc= sqrt(tempAcc);
+    Serial.println(tempAcc);
 
-    Serial.println("testval : ");
+    sumAcc = sumAcc + tempAcc; //sum the current acceleration with the previous ones
+    nbAcc = nbAcc + 1; //increment the number of accelerations stored in sumAcc
 
-    for (int i=0;i<ACC_BUFF-1;++i)
-    {
-      accelerationBuffer[i]=accelerationBuffer[i+1]; //values are transferred
-    }
-    accelerationBuffer[ACC_BUFF-1] = tempval; //last value is updated
-
-    float testval = 0;
-    for (int i=0;i<ACC_BUFF;++i)
-    {
-      testval = testval + accelerationBuffer[i]; //values are summed
+    if (sinceAccTest >= thresholdLength) { //average the sum and transfer it to the test value every thresholdLength
+      sinceAccTest = sinceAccTest - thresholdLength; //decrement and adjust for latency
+      testAcc = sumAcc / nbAcc; //perform the average
+      sumAcc = 0; //empty the buffer
+      nbAcc=0; //reinitialize the counter
     }
 
-    testval = testval / ACC_BUFF;
+    Serial.println(testAcc);
 
-    Serial.println(testval);
-    if(testval>4.0)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
+    if(testAcc>thresholdAcc)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
     {
       liftoff=true;
       Serial.println("liftoff!");
