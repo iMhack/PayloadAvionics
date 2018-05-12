@@ -617,6 +617,30 @@ bool Adafruit_BNO055::isFullyCalibrated(void)
     return true;
 }
 
+void Adafruit_BNO055::setGRange(adafruit_bno055_acc_config_t range)
+{
+  adafruit_bno055_opmode_t modeback = _mode;
+
+  /* Switch to config mode (just in case since this is the default) */
+  setMode(OPERATION_MODE_CONFIG);
+  delay(25);
+
+  /* save selected page ID and switch to page 1 */
+  uint8_t savePageID = read8(BNO055_PAGE_ID_ADDR);
+  write8(BNO055_PAGE_ID_ADDR, 0X01);
+
+  /* set configuration to 2G range */
+  write8(BNO055_ACC_CONFIG_ADDR, range);
+  delay(10);
+
+  /* restore page ID */
+  write8(BNO055_PAGE_ID_ADDR, savePageID);
+
+  /* Set the requested operating mode (see section 3.3) */
+  setMode(modeback);
+  delay(20);
+}
+
 
 /***************************************************************************
  PRIVATE FUNCTIONS

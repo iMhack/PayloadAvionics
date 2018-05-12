@@ -45,7 +45,6 @@ extern uint32_t datagramSeqNumber = 0;
 uint8_t datas[SENSOR_PACKET_SIZE];
 uint8_t dataGPS[GPS_PACKET_SIZE];
 elapsedMillis time;
-elapsedMillis sinceAccTest; //time since the last acceleration average
 
 /* BME DEFINES */
 
@@ -63,13 +62,27 @@ bool liftoff=false;
 
 bool setupFail=false; //boolean remains false unless a setup failure is detected
 
-/* ACCELERATION BUFFER */
+/* TEST VARIABLES */
+
+elapsedMillis sinceAccTest; //time since the last acceleration average
+elapsedMillis sincePrCalib; //time since the last pressure calibration
+
+/* ACCELERATION TRIGGER */
 
 unsigned long thresholdLength=500; //length in ms during which the acceleration should be averaged to detect the liftoff
 unsigned int nbAcc=0; //number of accelration values stored in sumAcc during thresholdLength
 float sumAcc=0.0; //initialize the variable that will store the sum of the accelerations during the previous thresholdLength
 float testAcc = 0.0; //average of the accleration over thresholdLength
 float thresholdAcc = 9.81; //threshold on testAcc in m/s^2 (not in Gs !!)
+
+/* PRESSURE TRIGGER */ //detects the overpressure occurring at ejection
+
+float thresholdPr = 1500; //value in hPa for the threshold
+unsigned long calibPeriod = 60000; //time between 2 updates of the pressure calibration
+float currentPr = 0.0; //current pressure
+float prevPr = 0.0; //previous pressure, used to ensure that the value actually used to measure pressure was on the launchpad
+float liftoffPr = 0.0; //last pressure measured before liftoff, should be passed to the altimeter as bme.readAltitude(liftoffPr)
+
 
 //-----------------------------------------------------------------------------
 //SETUP()
@@ -111,6 +124,7 @@ void setup()
   } Serial.println("Card initialized.");
 
   Serial.println("BNO config");
+  bno.setGRange(Adafruit_BNO055::ACC_CONFIG_8G); //sets the range of the accelerometer, can be 2G, 4G, 8G or 16G
   if (not bno.begin()) {
     setupFail=true;
     Serial.println("Failed to initialize BNO055! Is the sensor connected?");
@@ -161,11 +175,22 @@ void setup()
 //  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
 
   sinceAccTest = 0; //set it back to 0 before actually starting to measure
+  sincePrCalib = 0; //idem
 
-  while(liftoff==false)
-    {
+  while(liftoff==false) {
+
+    /*Calibration of the pressure sensor for the altimeter (every minute) */
+
+    if (sincePrCalib >= calibPeriod) { //average the sum and transfer it to the test value every thresholdLength
+      sincePrCalib = sincePrCalib - calibPeriod; //decrement and adjust for latency
+      prevPr=currentPr;
+      currentPr=bme.readPressure();
+    }
+
+    /*Trigger creation*/
+
     Serial.println("tempAcc : ");
-    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL); //linear acceleration removes the gravity
+    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER); //total acceleration (gravity included)
     float tempAcc= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
     tempAcc= sqrt(tempAcc);
     Serial.println(tempAcc);
@@ -180,11 +205,13 @@ void setup()
       nbAcc=0; //reinitialize the counter
     }
 
+    Serial.println("tempAcc : ");
     Serial.println(testAcc);
 
-    if(testAcc>thresholdAcc)//acceleration trigger, put 5.0 if you want to trigger manually, else, put 40~50. Those are m/s^2.
+    if(testAcc>thresholdAcc || bme.readPressure()>thresholdPr)//threshold on both the acceleration and pressure
     {
       liftoff=true;
+      liftoffPr=prevPr; //calibrate the pressure for the altimeter
       Serial.println("liftoff!");
     }
 

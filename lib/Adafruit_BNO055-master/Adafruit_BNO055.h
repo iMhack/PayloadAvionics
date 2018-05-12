@@ -75,6 +75,9 @@ class Adafruit_BNO055 : public Adafruit_Sensor
       BNO055_SW_REV_ID_MSB_ADDR                               = 0x05,
       BNO055_BL_REV_ID_ADDR                                   = 0X06,
 
+      /* PAGE1 REGISTER DEFINITION START*/
+      BNO055_ACC_CONFIG_ADDR                                  = 0X08, //different from BNO055_ACCEL_DATA_X_LSB_ADDR (page 0)
+
       /* Accel data register */
       BNO055_ACCEL_DATA_X_LSB_ADDR                            = 0X08,
       BNO055_ACCEL_DATA_X_MSB_ADDR                            = 0X09,
@@ -260,6 +263,14 @@ class Adafruit_BNO055 : public Adafruit_Sensor
       REMAP_SIGN_P7                                           = 0x05
     } adafruit_bno055_axis_remap_sign_t;
 
+    typedef enum
+    {
+      ACC_CONFIG_2G                                           = 0x0b, // +/-2G range
+      ACC_CONFIG_4G                                           = 0x1b, // default +/-4G range
+      ACC_CONFIG_8G                                           = 0x2b, // +/-8G range
+      ACC_CONFIG_16G                                          = 0x3b, // +/-16G range
+    } adafruit_bno055_acc_config_t;
+
     typedef struct
     {
       uint8_t  accel_rev;
@@ -312,6 +323,9 @@ class Adafruit_BNO055 : public Adafruit_Sensor
     void  setSensorOffsets(const uint8_t* calibData);
     void  setSensorOffsets(const adafruit_bno055_offsets_t &offsets_type);
     bool  isFullyCalibrated(void);
+
+    /* Function to set G range */
+    void setGRange(adafruit_bno055_acc_config_t range);
 
   private:
     byte  read8   ( adafruit_bno055_reg_t );
