@@ -617,6 +617,12 @@ bool Adafruit_BNO055::isFullyCalibrated(void)
     return true;
 }
 
+/**************************************************************************/
+/*!
+    @brief  Sets the new acceleration range of the accelerometer
+*/
+/**************************************************************************/
+
 void Adafruit_BNO055::setGRange(adafruit_bno055_acc_config_t range)
 {
   adafruit_bno055_opmode_t modeback = _mode;

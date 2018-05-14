@@ -265,7 +265,7 @@ class Adafruit_BNO055 : public Adafruit_Sensor
 
     typedef enum
     {
-      ACC_CONFIG_2G                                           = 0x0b, // +/-2G range
+      ACC_CONFIG_2G                                           = 0X0b, // +/-2G range
       ACC_CONFIG_4G                                           = 0x1b, // default +/-4G range
       ACC_CONFIG_8G                                           = 0x2b, // +/-8G range
       ACC_CONFIG_16G                                          = 0x3b, // +/-16G range

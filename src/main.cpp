@@ -73,11 +73,12 @@ unsigned long thresholdLength=500; //length in ms during which the acceleration 
 unsigned int nbAcc=0; //number of accelration values stored in sumAcc during thresholdLength
 float sumAcc=0.0; //initialize the variable that will store the sum of the accelerations during the previous thresholdLength
 float testAcc = 0.0; //average of the accleration over thresholdLength
-float thresholdAcc = 9.81; //threshold on testAcc in m/s^2 (not in Gs !!)
+float thresholdAccG = 3; //threshold on testAcc in G
+float thresholdAcc = thresholdAccG*9.81; //threshold on testAcc in m/s^2
 
 /* PRESSURE TRIGGER */ //detects the overpressure occurring at ejection
 
-float thresholdPr = 1500; //value in hPa for the threshold
+float thresholdPr = 150000; //value in Pa for the threshold
 unsigned long calibPeriod = 60000; //time between 2 updates of the pressure calibration
 float currentPr = 0.0; //current pressure
 float prevPr = 0.0; //previous pressure, used to ensure that the value actually used to measure pressure was on the launchpad
@@ -124,11 +125,11 @@ void setup()
   } Serial.println("Card initialized.");
 
   Serial.println("BNO config");
-  bno.setGRange(Adafruit_BNO055::ACC_CONFIG_8G); //sets the range of the accelerometer, can be 2G, 4G, 8G or 16G
   if (not bno.begin()) {
     setupFail=true;
     Serial.println("Failed to initialize BNO055! Is the sensor connected?");
   }
+  bno.setGRange(Adafruit_BNO055::ACC_CONFIG_8G); //sets the range of the accelerometer, can be 2G, 4G, 8G or 16G
 
   Serial.println("BME config");
   if (not bme.begin(&Wire1))  {
@@ -205,8 +206,11 @@ void setup()
       nbAcc=0; //reinitialize the counter
     }
 
-    Serial.println("tempAcc : ");
+    Serial.println("testAcc : ");
     Serial.println(testAcc);
+
+    Serial.println("pressure : ");
+    Serial.println(bme.readPressure());
 
     if(testAcc>thresholdAcc || bme.readPressure()>thresholdPr)//threshold on both the acceleration and pressure
     {
