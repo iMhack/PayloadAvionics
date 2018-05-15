@@ -1,0 +1,1 @@
+You might want to use home made connectors for this avionics. We suggest to use "Engineer PA-09" from Japan to crimp terminals.
