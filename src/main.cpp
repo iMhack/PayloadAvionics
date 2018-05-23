@@ -15,7 +15,7 @@
 //DEFINE
 //-----------------------------------------------------------------------------
 
-//conso de 1.6mA
+//conso de 180mA average when active, 110mA when idle  
 #define LED 2
 
 /* GPS DEFINES */
