@@ -1,12 +1,11 @@
 #include "ADC.h"
 #include "RingBuffer.h"
 
-const int readPin = A8;
+const int readPin = A9;
 
 ADC *adc = new ADC(); // adc object
 
 RingBuffer *buffer = new RingBuffer;
-elapsedMicros since;
 
 
 void setup() {
@@ -19,8 +18,12 @@ void setup() {
     // reference can be ADC_REFERENCE::REF_3V3, ADC_REFERENCE::REF_1V2 (not for Teensy LC) or ADC_REF_EXT.
     //adc->setReference(ADC_REFERENCE::REF_1V2, ADC_0); // change all 3.3 to 1.2 if you change the reference to 1V2
 
-    adc->setAveraging(1); // set number of averages
+    adc->setAveraging(8); // set number of averages
     adc->setResolution(12); // set bits of resolution
+
+
+    adc->setAveraging(32, ADC_1); // set number of averages
+    adc->setResolution(12, ADC_1); // set bits of resolution
 
     // always call the compare functions after changing the resolution!
     //adc->enableCompare(1.0/3.3*adc->getMaxValue(ADC_0), 0, ADC_0); // measurement will be ready if value < 1.0V
@@ -35,12 +38,11 @@ void loop() {
 
     value = adc->analogRead(readPin);
 
-    //buffer->write(value);
+    buffer->write(value);
 
-    //Serial.print("Buffer read:");
-    //Serial.println(buffer->read()*3.3/adc->getMaxValue());
-    Serial.println(value);
-    delay(50);
+    Serial.print("Buffer read:");
+    Serial.println(buffer->read()*3.3/adc->getMaxValue());
 
-
+    delay(100);
 }
+
