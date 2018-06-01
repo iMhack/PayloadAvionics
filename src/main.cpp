@@ -11,7 +11,7 @@
 #include <SD.h>
 
 #define BUF_SIZE 8 //256 for 2 adc, 512 for one (max), 8 for 8 channel 1 ADC and a larger ADC
-#define GLOBAL_BUF 4096 //size of the buffer that empties the adc buffer through an interrupt function
+#define GLOBAL_BUF 4096 //32768 //size of the buffer that empties the adc buffer through an interrupt function
 
 ADC *adc = new ADC(); // adc object
 
@@ -20,7 +20,9 @@ ADC *adc = new ADC(); // adc object
 const int chipSelect = BUILTIN_SDCARD;
 
 IntervalTimer timer0;
+IntervalTimer timer1;
 int startTimerValue0 = 0;
+int startTimerValue1 = 0;
 
 DMAChannel* dma0 = new DMAChannel(false);
 DMAChannel* dma1 = new DMAChannel(false);
@@ -42,16 +44,22 @@ A9=0x44
 */
 const int ledPin = 13;
 
-const int period0 = 100; // us
+const int period0 = 1; // us
+const int periodFile = 10000000; // us, every 10 seconds a new file is opened
 
 //Initialize the buffers
 DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE];
 static volatile uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer1[GLOBAL_BUF];
 static volatile uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer2[GLOBAL_BUF];
+const uint16_t initBuff = 50000;
 volatile int pos=0; //current position within the global buffers
 volatile bool BUFF=false; //choose which buffer should be filled, which one should be emptied (false: fill 1, empty 2 and vv)
 
 volatile int d2_active;
+
+elapsedMillis debounce;
+elapsedMillis timecheck;
+elapsedMicros callbacktime;
 
 //void dma2_isr(void);
 void dma0_isr(void);
@@ -59,11 +67,11 @@ void d2_isr(void);
 void setup_adc() ;
 void setup_dma();
 void callback(void);
+void fileManager(void);
 
 void setup() {
   // initialize the digital pin as an output.
   pinMode(ledPin, OUTPUT);
-  delay(5000);
 
   d2_active = 0;
 
@@ -72,6 +80,8 @@ void setup() {
   pinMode(6, OUTPUT);
 
   //attachInterrupt(2, d2_isr, FALLING);
+
+  delay(5000);
 
   Serial.println("SD card config");
   if (!SD.begin(chipSelect))
@@ -85,61 +95,73 @@ void setup() {
 
   // clear buffers (adc output should never go higher than 4095 in 12 bits config)
   for (int i = 0; i < BUF_SIZE; ++i){
-      adcbuffer[i] = 50000;
+      adcbuffer[i]=initBuff;
   }
 
   for (int i = 0; i < GLOBAL_BUF; ++i){
-      globalbuffer1[i] = 50000;
-      globalbuffer2[i] = 50000;
+      globalbuffer1[i]=initBuff;
+      globalbuffer2[i]=initBuff;
   }
 
   setup_adc();
   setup_dma();
-
   startTimerValue0 = timer0.begin(callback, period0);
-
+  startTimerValue1 = timer1.begin(fileManager, periodFile);
 }
-elapsedMillis debounce;
-elapsedMillis timecheck;
-elapsedMicros callbacktime;
 
 //uint16_t analog=0; //variable that will store locally the value of the buffer
 
 void loop() {
 
   timecheck=0;
-
+  /*
   File testFile = SD.open("testlog.txt", FILE_WRITE);
 
   // if the file is available, write to it:
   if (testFile) {
-    if (!BUFF) {
-      BUFF=!BUFF; //switch to the second buffer before emptying the first
+    if (BUFF==false) {
+      BUFF=true; //switch to the second buffer before emptying the first
       pos=0; //initialize back the position
-      for (int i=0;i<GLOBAL_BUF;i++) {
-        if (globalbuffer2[i]!=50000) {
-          testFile.println(globalbuffer2[i]);
-          globalbuffer2[i]=50000;
+      for (int i=0;i<GLOBAL_BUF;i=i+8) {
+        if (globalbuffer2[i]!=initBuff) {
+          testFile.print(globalbuffer2[i]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+1]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+2]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+3]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+4]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+5]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+6]); testFile.print("  ");
+          testFile.println(globalbuffer2[i+7]);
+          if (timecheck>500) testFile.println("fuckup");
+          globalbuffer2[i]=initBuff;
         }
       }
     }
     else {
-      BUFF=!BUFF; //switch to the second buffer before emptying the first
+      BUFF=false; //switch to the second buffer before emptying the first
       pos=0; //initialize back the position
-      for (int i=0;i<GLOBAL_BUF;i++) {
-        if (globalbuffer1[i]!=50000) {
-          testFile.println(globalbuffer1[i]);
-          globalbuffer1[i]=50000;
+      for (int i=0;i<GLOBAL_BUF;i=i+8) {
+        if (globalbuffer1[i]!=initBuff) {
+          testFile.print(globalbuffer2[i]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+1]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+2]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+3]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+4]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+5]); testFile.print("  ");
+          testFile.print(globalbuffer2[i+6]); testFile.print("  ");
+          testFile.println(globalbuffer2[i+7]);
+          globalbuffer2[i]=initBuff;
         }
       }
-    } testFile.close();
+    }
     // print to the serial port too:
   }
   // if the file isn't open, pop up an error:
   else {
     Serial.println("error opening testlog.txt");
   }
-  Serial.println(timecheck);
+  testFile.close();*/
+  //Serial.println(timecheck);
 
   /*
   digitalWrite(ledPin, HIGH);   // set the LED on
@@ -215,14 +237,32 @@ void dma0_isr(void) {
     digitalWriteFast(4, LOW);
 }
 
-void callback(void) {
-  for (int i=0;i<BUF_SIZE;i++) {
-      if (!BUFF) {
-        globalbuffer1[pos+i]=adcbuffer[i];
+void callback(void) {/*
+  if ((pos + BUF_SIZE - 1) < GLOBAL_BUF) {
+    if (BUFF==false) {
+      for (int i=0;i<BUF_SIZE;i++) {
+        //globalbuffer1[pos+i]=adcbuffer[i];
+        Serial.print(adcbuffer[i]);
       }
-      else {
+    }
+    else {
+      for (int i=0;i<BUF_SIZE;i++) {
         globalbuffer2[pos+i]=adcbuffer[i];
       }
-      pos = pos + BUF_SIZE;
-  }
+    } pos = pos + BUF_SIZE;
+  }*/
+
+  Serial.print(adcbuffer[0]); Serial.print("  ");
+  Serial.print(adcbuffer[1]); Serial.print("  ");
+  Serial.print(adcbuffer[2]); Serial.print("  ");
+  Serial.print(adcbuffer[3]); Serial.print("  ");
+  Serial.print(adcbuffer[4]); Serial.print("  ");
+  Serial.print(adcbuffer[5]); Serial.print("  ");
+  Serial.print(adcbuffer[6]); Serial.print("  ");
+  Serial.print(adcbuffer[7]); Serial.print("  ");
+  Serial.println(callbacktime);
+}
+
+void fileManager(void) {
+
 }
