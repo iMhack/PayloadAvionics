@@ -1,174 +1,228 @@
-/*
-    This example shows how to use the IntervalTimer library and the ADC library in the Teensy 3.0/3.1
+//Almost working DMA multichannel
 
-    The three important objects are: the ADC, the (one or more) IntervalTimer and the same number of RingBuffer.
-
-    The ADC sets up the internal ADC, you can change the settings as usual. Enable interrupts.
-    The IntervalTimer (timerX) executes a function every 'period' microseconds.
-    This function, timerX_callback, starts the desired ADC measurement, for example:
-        startSingleRead, startSingleDifferential, startSynchronizedSingleRead, startSynchronizedSingleDifferential
-    you can use the ADC0 or ADC1 (only for Teensy 3.1).
-
-    When the measurement is done, the adc_isr is executed:
-        - If you have more than one timer per ADC module you need to know which pin was measured.
-        - Then you store/process the data
-        - Finally, if you have more than one timer you can check whether the last measurement interruped a
-          a previous one (using adc->adcX->adcWasInUse), and restart it if so.
-          The settings of the interrupted measurement are stored in the adc->adcX->adc_config struct.
+// Converted to only 1 buffer per ADC, reduced to a small example.
+//Based on Example by SaileNav
 
 
-*/
-
-
-
+#include "DMAChannel.h"
 #include "ADC.h"
 // and IntervalTimer
 #include <IntervalTimer.h>
-#include <math.h>
-#include <algorithm> //for std::fill_n
-#include <vector>
+#include <SD.h>
 
-const int ledPin = LED_BUILTIN;
-
-/*const int readPin0 = A10;*/
-const int emptyingPeriod = 100; // us
-
-/*
-const int readPin1 = A11;
-const int period1 = 120; // us
-*/
-const int readPeriod = 10000; // us
+#define BUF_SIZE 8 //256 for 2 adc, 512 for one (max), 8 for 8 channel 1 ADC and a larger ADC
+#define GLOBAL_BUF 4096 //size of the buffer that empties the adc buffer through an interrupt function
 
 ADC *adc = new ADC(); // adc object
 
-IntervalTimer timer0; // timers
+/*SD CARD CHIPSELECT*/
 
-/* Replace the buffers by a 100entries table
-RingBuffer *buffer0 = new RingBuffer; // buffers to store the values
-RingBuffer *buffer1 = new RingBuffer;
-*/
+const int chipSelect = BUILTIN_SDCARD;
 
-#define PINS 8
-uint8_t adc_pins[] = {A0,A1,A2,A3,A4,A7,A8,A9,A10};
+IntervalTimer timer0;
 int startTimerValue0 = 0;
 
-bool buff = false; //set a global variable that says which buffer to use (false -> 0, true ->1)
-int tIdx = 0; //set a global variable to give the current line to be written in the buffer
+DMAChannel* dma0 = new DMAChannel(false);
+DMAChannel* dma1 = new DMAChannel(false);
 
-void callback();
+//ChannelsCfg order must be {CH1, CH2, CH3, CH0 }, adcbuffer output will be CH0, CH1, CH2, CH3
+//Order must be {Second . . . . . . . . First} no matter the number of channels used.
+const uint16_t ChannelsCfg_0 [] =  { 0x4E, 0x48, 0x49, 0x46, 0x47, 0x4F, 0x44, 0x45 };  //ADC0: CH0 ad6(A6), CH1 ad7(A7), CH2 ad15(A8), CH3 ad4(A9) works
+//const uint16_t ChannelsCfg_0 [] =  { 0x49, 0x4F, 0x46, 0x48 };  //ADC0: CH0 ad6(A6), CH1 ad7(A7), CH2 ad15(A8), CH3 ad4(A9)
+//const uint16_t ChannelsCfg_1 [] =  { 0x4E, 0x19, 0x1A, 0x45 };  //ADC1: CH0 ad4(A17), CH1 ad5(A16), CH2ad6(A18), CH3 ad7(A19)
+/*ADC0:
+A0=0x45
+A1=0x4E
+A2=0x48
+A3=0x49
+A6=0x46
+A7=0x47
+A8=0x4F
+A9=0x44
+*/
+const int ledPin = 13;
+
+const int period0 = 100; // us
+
+//Initialize the buffers
+DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE];
+static volatile uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer1[GLOBAL_BUF];
+static volatile uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer2[GLOBAL_BUF];
+volatile int pos=0; //current position within the global buffers
+volatile bool BUFF=false; //choose which buffer should be filled, which one should be emptied (false: fill 1, empty 2 and vv)
+
+volatile int d2_active;
+
+//void dma2_isr(void);
+void dma0_isr(void);
+void d2_isr(void);
+void setup_adc() ;
+void setup_dma();
+void callback(void);
 
 void setup() {
+  // initialize the digital pin as an output.
+  pinMode(ledPin, OUTPUT);
+  delay(5000);
 
-    pinMode(ledPin, OUTPUT); // led blinks every loop
+  d2_active = 0;
 
-    pinMode(ledPin+1, OUTPUT); // timer0 starts a measurement
-    pinMode(ledPin+2, OUTPUT); // timer1 starts a measurement
-    pinMode(ledPin+3, OUTPUT); // adc0_isr, measurement finished for readPin0
-    pinMode(ledPin+4, OUTPUT); // adc0_isr, measurement finished for readPin1
+  pinMode(2, INPUT_PULLUP);
+  pinMode(4, OUTPUT);
+  pinMode(6, OUTPUT);
 
-    for (int i=0;i<PINS;i++) { /*store the value in a buffer*/
-      pinMode(adc_pins[i], INPUT);
-    }
+  //attachInterrupt(2, d2_isr, FALLING);
 
-    Serial.begin(9600);
+  Serial.println("SD card config");
+  if (!SD.begin(chipSelect))
+  {
+    Serial.println("Card failed, or not present");
+  // don't do anything more:
+  // return; //this line makes it directly jumps to loop - use the boolean setupFail instead
+  } Serial.println("Card initialized.");
 
-    delay(1000);
+  Serial.begin(9600);
 
-    ///// ADC0 ////
-    // reference can be ADC_REFERENCE::REF_3V3, ADC_REFERENCE::REF_1V2 (not for Teensy LC) or ADC_REFERENCE::REF_EXT.
-    //adc->setReference(ADC_REFERENCE::REF_1V2, ADC_0); // change all 3.3 to 1.2 if you change the reference to 1V2
+  // clear buffers (adc output should never go higher than 4095 in 12 bits config)
+  for (int i = 0; i < BUF_SIZE; ++i){
+      adcbuffer[i] = 50000;
+  }
 
-    adc->setAveraging(1); // set number of averages
-    adc->setResolution(12); // set bits of resolution
+  for (int i = 0; i < GLOBAL_BUF; ++i){
+      globalbuffer1[i] = 50000;
+      globalbuffer2[i] = 50000;
+  }
 
-    // it can be any of the ADC_CONVERSION_SPEED enum: VERY_LOW_SPEED, LOW_SPEED, MED_SPEED, HIGH_SPEED_16BITS, HIGH_SPEED or VERY_HIGH_SPEED
-    // see the documentation for more information
-    // additionally the conversion speed can also be ADACK_2_4, ADACK_4_0, ADACK_5_2 and ADACK_6_2,
-    // where the numbers are the frequency of the ADC clock in MHz and are independent on the bus speed.
-    adc->setConversionSpeed(ADC_CONVERSION_SPEED::HIGH_SPEED); // change the conversion speed
-    // it can be any of the ADC_MED_SPEED enum: VERY_LOW_SPEED, LOW_SPEED, MED_SPEED, HIGH_SPEED or VERY_HIGH_SPEED
-    adc->setSamplingSpeed(ADC_SAMPLING_SPEED::HIGH_SPEED); // change the sampling speed
+  setup_adc();
+  setup_dma();
 
-    // always call the compare functions after changing the resolution!
-    //adc->enableCompare(1.0/3.3*adc->getMaxValue(ADC_0), 0, ADC_0); // measurement will be ready if value < 1.0V
-    //adc->enableCompareRange(1.0*adc->getMaxValue(ADC_0)/3.3, 2.0*adc->getMaxValue(ADC_0)/3.3, 0, 1, ADC_0); // ready if value lies out of [1.0,2.0] V
+  startTimerValue0 = timer0.begin(callback, period0);
 
-    // If you enable interrupts, notice that the isr will read the result, so that isComplete() will return false (most of the time)
-    //adc->enableInterrupts(ADC_0);
-
-
-    Serial.println("Starting Timers");
-
-    // start the timers, if it's not possible, startTimerValuex will be false
-    startTimerValue0 = timer0.begin(callback, emptyingPeriod);
-
-    adc->enableInterrupts(ADC_0);
-
-    if(startTimerValue0==false) {
-            Serial.println("Timer0 setup failed");
-    }
-
-    Serial.println("Timers started");
-
-    delay(500);
 }
+elapsedMillis debounce;
+elapsedMillis timecheck;
+elapsedMicros callbacktime;
 
-const int bufferSize = floor(1.1*emptyingPeriod/readPeriod); //define the size of the buffer according to the different periods of interest, with a 10% margin
-
-int value = 0; //intermediary value for the reading (necessary ?)
-int initValue = -1;
-int buffer0[bufferSize][PINS]; //create 2 buffers, one to be filled and one to be emptied
-int buffer1[bufferSize][PINS];
-std::vector<int> second (bufferSize*PINS,initValue);
-//std::fill_n(buffer0.begin(), bufferSize*PINS, initValue); //intialize the buffers at -1
-//std::fill_n(buffer1.begin(), bufferSize*PINS, initValue);
+//uint16_t analog=0; //variable that will store locally the value of the buffer
 
 void loop() {
 
-    /* Open the file storing the content of the buffers and fill it */
+  timecheck=0;
 
-    File muonFile = SD.open("muonData.txt", FILE_WRITE);
+  File testFile = SD.open("testlog.txt", FILE_WRITE);
 
-    if (muonFile) {
-      if (buff) {
-        //empty buff1 (buff0 writing ongoing) and fill it up with -1 until the newly accessed line is -1
-        buff = !buff; //change the current buffer before starting to empty the previous one
-        tIdx=0; //reset the time index for the bufferSize
-      }
-      else {
-        //empty buff0 (buff1 writing ongoing) and fill it up with -1 until the newly accessed line is -1
-        buff = !buff; //change the current buffer before starting to empty the previous one
-        tIdx=0; //reset the time index for the bufferSize
+  // if the file is available, write to it:
+  if (testFile) {
+    if (!BUFF) {
+      BUFF=!BUFF; //switch to the second buffer before emptying the first
+      pos=0; //initialize back the position
+      for (int i=0;i<GLOBAL_BUF;i++) {
+        if (globalbuffer2[i]!=50000) {
+          testFile.println(globalbuffer2[i]);
+          globalbuffer2[i]=50000;
+        }
       }
     }
-    // if the file isn't open, pop up an error:
     else {
-      Serial.println("error opening datamuon.txt");
-    }
+      BUFF=!BUFF; //switch to the second buffer before emptying the first
+      pos=0; //initialize back the position
+      for (int i=0;i<GLOBAL_BUF;i++) {
+        if (globalbuffer1[i]!=50000) {
+          testFile.println(globalbuffer1[i]);
+          globalbuffer1[i]=50000;
+        }
+      }
+    } testFile.close();
+    // print to the serial port too:
+  }
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening testlog.txt");
+  }
+  Serial.println(timecheck);
 
-    delayMicroseconds(readPeriod);
+  /*
+  digitalWrite(ledPin, HIGH);   // set the LED on
+  delay(100);                  // wait for a second
+  digitalWrite(ledPin, LOW);    // set the LED off
+  delay(100);
+  */
 }
 
-/* The callback */
+void setup_dma() {
+  dma0->begin(true);              // allocate the DMA channel
+  dma0->TCD->SADDR = &ADC0_RA;    // where to read from
+  dma0->TCD->SOFF = 0;            // source increment each transfer
+  dma0->TCD->ATTR = 0x101;
+  dma0->TCD->NBYTES = 2;     // bytes per transfer
+  dma0->TCD->SLAST = 0;
+  dma0->TCD->DADDR = &adcbuffer[0];// where to write to
+  dma0->TCD->DOFF = 2;
+  dma0->TCD->DLASTSGA = -2*BUF_SIZE;
+  dma0->TCD->BITER = BUF_SIZE;
+  dma0->TCD->CITER = BUF_SIZE;
+  dma0->triggerAtHardwareEvent(DMAMUX_SOURCE_ADC0);
+  dma0->disableOnCompletion();    // require restart in code
+  dma0->interruptAtCompletion();
+  dma0->attachInterrupt(dma0_isr);
 
-void callback() {
+  dma1->begin(true);              // allocate the DMA channel
+  dma1->TCD->SADDR = &ChannelsCfg_0[0];
+  dma1->TCD->SOFF = 2;            // source increment each transfer (n bytes)
+  dma1->TCD->ATTR = 0x101;
+  dma1->TCD->SLAST = -16;          // num ADC0 samples * 2
+  dma1->TCD->BITER = 8;           // num of ADC0 samples
+  dma1->TCD->CITER = 8;           // num of ADC0 samples
+  dma1->TCD->DADDR = &ADC0_SC1A;
+  dma1->TCD->DLASTSGA = 0;
+  dma1->TCD->NBYTES = 2;
+  dma1->TCD->DOFF = 0;
+  dma1->triggerAtTransfersOf(*dma0);
+  dma1->triggerAtCompletionOf(*dma0);
 
-  for (int i=0;i<PINS;i++) { /*store the value in a buffer*/
-      value = adc->analogRead(adc_pins[i]); // read a new value, will return ADC_ERROR_VALUE if the comparison is false.
-      Serial.print("A");
-      Serial.print(i);
-      Serial.print(": ");
-      Serial.print(value*3.3/adc->getMaxValue(ADC_0), 2);
-      Serial.print(". ");/*
-      if (buff) {
-        buffer0[tIdx][i]=(value*3.3/adc->getMaxValue(ADC_0));
-        //if it can be done at once buffer0[t][i]=(adc->analogRead(adc_pins[i])*3.3/adc->getMaxValue(ADC_0));
+  dma0->enable();
+  dma1->enable();
+
+}
+
+void setup_adc() {
+  //ADC0
+  adc->setAveraging(4, ADC_0); // set number of averages
+  adc->adc0->setResolution(12); // set bits of resolution
+  adc->setConversionSpeed(ADC_CONVERSION_SPEED::VERY_HIGH_SPEED, ADC_0); // change the conversion speed
+  adc->setSamplingSpeed(ADC_SAMPLING_SPEED::VERY_HIGH_SPEED, ADC_0); // change the sampling speed
+
+  ADC1_CFG2 |= ADC_CFG2_MUXSEL;
+
+  adc->adc0->enableDMA(); //ADC0_SC2 |= ADC_SC2_DMAEN;  // using software trigger, ie writing to ADC0_SC1A
+  adc->adc1->enableDMA();
+
+}
+
+void d2_isr(void) {
+  if(debounce > 200){
+    d2_active = 1;
+    debounce = 0;
+    }
+    else{return;}
+}
+
+void dma0_isr(void) {
+    dma0->TCD->DADDR = &adcbuffer[0];
+    dma0->clearInterrupt();
+    dma0->enable();
+    digitalWriteFast(4, HIGH);
+    digitalWriteFast(4, LOW);
+}
+
+void callback(void) {
+  for (int i=0;i<BUF_SIZE;i++) {
+      if (!BUFF) {
+        globalbuffer1[pos+i]=adcbuffer[i];
       }
       else {
-        buffer1[tIdx][i]=(value*3.3/adc->getMaxValue(ADC_0));
-        //if it can be done at once buffer0[t][i]=(adc->analogRead(adc_pins[i])*3.3/adc->getMaxValue(ADC_0));
-      }*/
-      //delayMicroseconds(25); //wait before starting another measurement
+        globalbuffer2[pos+i]=adcbuffer[i];
+      }
+      pos = pos + BUF_SIZE;
   }
-
 }
