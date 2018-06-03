@@ -43,7 +43,7 @@ const int ledPin = 13;
 
 const int flightLength = 15; //length of the flight in min
 
-const int period0 = 100; // us
+const int period0 = 300; // us
 unsigned long filePeriod = 30000; //ms (compared to an elapsedMillis)
 unsigned long criticTime = 50; //to test
 
@@ -162,12 +162,13 @@ void loop() {
     std::copy(std::begin(globalbuffer1), std::end(globalbuffer1), std::begin(globalbuffer2));
     pos=0; //initialize back the position
     testFile.println(timeLog);
-    for (int k=0;k<400;k=k+BUF_SIZE) { //go through the buffer
+    for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
       if (globalbuffer2[k]!=initBuff) { //stop when you reach the last written line
         for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-          //if (globalbuffer2[k+l]<20){ //only write if the buffer respects the threshold
+          if (globalbuffer2[k+l]<20){ //only write if the buffer respects the threshold
             testFile.print(globalbuffer2[k+l]); testFile.print("  ");
-          //}
+          }
+          testFile.println();
         }
         globalbuffer1[k]=initBuff;
       }
@@ -258,11 +259,7 @@ void setup_files() {
   }
 
   for (int setj=0;setj<nbFiles;setj=setj+1) {
-    for (int setk=48;setk<56;setk=setk+1) {
-      str[3]=setk;
-      File setupFile = SD.open(str, FILE_WRITE);
-      setupFile.close();
-    }
+    File setupFile = SD.open(str, FILE_WRITE);
     increment_str(&(fileIdx[0]), &(str[4])); //change the file name
   }
 
