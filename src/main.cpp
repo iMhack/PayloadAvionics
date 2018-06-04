@@ -17,7 +17,7 @@
 using namespace std;
 
 #define BUF_SIZE 8 //256 for 2 adc, 512 for one (max), 8 for 8 channel 1 ADC and a larger ADC
-#define GLOBAL_BUF 4096 //32768 //size of the buffer that empties the adc buffer through an interrupt function
+#define GLOBAL_BUF 8192 //32768 //size of the buffer that empties the adc buffer through an interrupt function
 
 ADC *adc = new ADC(); // adc object
 
@@ -43,7 +43,7 @@ const int ledPin = 13;
 
 const int flightLength = 15; //length of the flight in min
 
-const int period0 = 300; // us
+const int period0 = 100; // us
 unsigned long filePeriod = 30000; //ms (compared to an elapsedMillis)
 unsigned long criticTime = 50; //to test
 
@@ -51,10 +51,12 @@ const double nbFiles=floor((flightLength*60*1000)/filePeriod);
 
 //Initialize the buffers
 DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE];
-static  uint8_t __attribute__((aligned(GLOBAL_BUF+0))) copybuffer[GLOBAL_BUF]; //to transverse the data from the two other buffers
-static  uint8_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer1[GLOBAL_BUF];
-static  uint8_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer2[GLOBAL_BUF];
-const uint8_t initBuff = 255;
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) copybuffer[GLOBAL_BUF]; //to transverse the data from the two other buffers
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer1[GLOBAL_BUF];
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer2[GLOBAL_BUF];
+unsigned long timebuffer[GLOBAL_BUF/BUF_SIZE];
+const uint16_t initBuff = 5000; //value used to initialize the buffer/as stop value
+const int thresholdMuon = 3000; //threshold over which the signal is considered to be the trace of a muon
 volatile int pos=0; //current position within the global buffers
 volatile bool BUFF=false; //choose which buffer should be filled, which one should be emptied (false: fill 1, empty 2 and vv)
 int setupIdx[]={48,48};
@@ -141,8 +143,9 @@ void setup() {
   setup_adc();
   setup_dma();
 
+  callbacktime=0; //reset the time before initiating the callbacks
   startTimerValue0 = timer0.begin(callback, period0);
-  //startTimerValue1 = timer1.begin(fileManager, periodFile);
+  startTimerValue1 = timer1.begin(fileManager, 60000);
   //delay(1000);
   Serial.println("Setup end !");
 }
@@ -153,10 +156,12 @@ void setup() {
 
 void loop() {
 
-  timecheck=0; //check the duration of the loop
+  //timecheck=0; //check the duration of the loop
 
-
+/*
   File testFile = SD.open(str, FILE_WRITE);
+
+  String muonString = "";
 
   if (testFile) {
     std::copy(std::begin(globalbuffer1), std::end(globalbuffer1), std::begin(globalbuffer2));
@@ -165,10 +170,10 @@ void loop() {
     for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
       if (globalbuffer2[k]!=initBuff) { //stop when you reach the last written line
         for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-          if (globalbuffer2[k+l]<20){ //only write if the buffer respects the threshold
-            testFile.print(globalbuffer2[k+l]); testFile.print("  ");
+          if (globalbuffer2[k+l]<1000) { //only write if the buffer respects the threshold
+            muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(globalbuffer2[k+l]);muonString += "  ";
+            testFile.println(muonString);
           }
-          testFile.println();
         }
         globalbuffer1[k]=initBuff;
       }
@@ -186,9 +191,8 @@ void loop() {
     sinceFile = sinceFile - filePeriod; //decrement and adjust for latency
     increment_str(&(fileIdx[0]),&(str[4])); //change the file name
   }
-
-  //Serial.println("bonjour");
-  Serial.println(timecheck);
+*/
+  //Serial.println(timecheck);
 /*
   digitalWrite(ledPin, HIGH);   // set the LED on
   delay(100);                  // wait for a second
@@ -300,8 +304,49 @@ void increment_str(int *idx, char* s) {
 
 void callback(void) {
   if ((pos + BUF_SIZE - 1) < GLOBAL_BUF){
+    timebuffer[pos/BUF_SIZE]=callbacktime;
     for (int i=0;i<BUF_SIZE;i++) {
       globalbuffer1[pos+i]=adcbuffer[i];
     }
   } pos = pos + BUF_SIZE;
+}
+
+void fileManager(void) {
+
+  File testFile = SD.open(str, FILE_WRITE);
+
+  String muonString = "";
+
+  if (testFile) {
+    std::copy(std::begin(globalbuffer1), std::end(globalbuffer1), std::begin(globalbuffer2));
+    pos=0; //initialize back the position
+    testFile.println(timeLog);
+    for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
+      if (globalbuffer2[k]!=initBuff) { //stop when you reach the last written line
+        for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
+          if (globalbuffer2[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
+            muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer2[k+l]);muonString += "  ";
+            testFile.println(muonString);
+          }
+        }
+        globalbuffer1[k]=initBuff;
+      }
+    }
+  }
+    // print to the serial port too:
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening ");
+    Serial.println(str);
+  }
+  testFile.close();
+
+  if (sinceFile >= filePeriod) { //create a new file periodically to limit the weight on the ram
+    sinceFile = sinceFile - filePeriod; //decrement and adjust for latency
+    increment_str(&(fileIdx[0]),&(str[4])); //change the file name
+  }
+
+  Serial.println(timecheck);
+
+  timecheck=0; //check the duration of the loop
 }
