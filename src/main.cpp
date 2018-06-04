@@ -51,10 +51,9 @@ const double nbFiles=floor((flightLength*60*1000)/filePeriod);
 
 //Initialize the buffers
 DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE];
-static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer1[GLOBAL_BUF];
-static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer2[GLOBAL_BUF];
-unsigned long timebuffer1[GLOBAL_BUF/BUF_SIZE];
-unsigned long timebuffer2[GLOBAL_BUF/BUF_SIZE];
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer[GLOBAL_BUF];
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) copybuffer[GLOBAL_BUF];
+unsigned long timebuffer[GLOBAL_BUF/BUF_SIZE];
 const uint16_t initBuff = 5000; //value used to initialize the buffer/as stop value
 const int thresholdMuon = 1800; //threshold over which the signal is considered to be the trace of a muon
 volatile int pos=0; //current position within the global buffers
@@ -132,8 +131,11 @@ void setup() {
   delay(100);
 
   for (int i = 0; i < GLOBAL_BUF; ++i){
-      globalbuffer1[i]=initBuff;
-      globalbuffer2[i]=initBuff;
+      globalbuffer[i]=initBuff;
+  }
+
+  for (int i = 0; i < GLOBAL_BUF/BUF_SIZE; ++i){
+      timebuffer[i]=0;
   }
 
   setup_adc();
@@ -163,38 +165,18 @@ void loop() {
   String muonString = "";
 
   if (testFile) {
-    //std::copy(std::begin(globalbuffer1), std::end(globalbuffer1), std::begin(globalbuffer2));
-
-    if (BUFF==false) { //if BUFF==false then read buffer 1, write buffer 2
-      BUFF = !BUFF;
-      pos=0; //initialize back the position
-      testFile.println(timeLog);
-      for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer1[k]!=initBuff) { //stop when you reach the last written line
-          for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-            if (globalbuffer1[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
-              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer1[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer1[k+l]);muonString += "  ";
-              testFile.println(muonString);
-            }
+    std::copy(std::begin(globalbuffer), std::end(globalbuffer), std::begin(copybuffer));
+    pos=0; //initialize back the position
+    testFile.println(timeLog);
+    for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
+      if (copybuffer[k]!=initBuff) { //stop when you reach the last written line
+        for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
+          if (copybuffer[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
+            muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer[k/BUF_SIZE]); muonString += "  "; muonString += String(copybuffer[k+l]);muonString += "  ";
+            testFile.println(muonString);
           }
-          globalbuffer1[k]=initBuff;
         }
-      }
-    }
-    else {
-      BUFF = !BUFF;
-      pos=0; //initialize back the position
-      testFile.println(timeLog);
-      for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer2[k]!=initBuff) { //stop when you reach the last written line
-          for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-            if (globalbuffer2[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
-              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer2[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer2[k+l]);muonString += "  ";
-              testFile.println(muonString);
-            }
-          }
-          globalbuffer2[k]=initBuff;
-        }
+        globalbuffer[k]=initBuff;
       }
     }
   }
@@ -323,22 +305,12 @@ void increment_str(int *idx, char* s) {
 void callback(void) {
 
   if ((pos + BUF_SIZE - 1) < GLOBAL_BUF){
-    if (BUFF==false) { //if BUFF==true, write buffers 2
-      timebuffer2[pos/BUF_SIZE]=callbacktime;
-      for (int i=0;i<BUF_SIZE;i++) {
-        globalbuffer2[pos+i]=adcbuffer[i];
-      }
-    }
-    else {
-      timebuffer1[pos/BUF_SIZE]=callbacktime;
-      for (int i=0;i<BUF_SIZE;i++) {
-        globalbuffer1[pos+i]=adcbuffer[i];
-      }
+    timebuffer[pos/BUF_SIZE]=callbacktime;
+    for (int i=0;i<BUF_SIZE;i++) {
+      globalbuffer[pos+i]=adcbuffer[i];
     }
   }
-
   pos = pos + BUF_SIZE;
-
 }
 
 /*
@@ -350,21 +322,21 @@ void fileManager(void) {
   String muonString = "";
 
   if (testFile) {
-    std::copy(std::begin(globalbuffer1), std::end(globalbuffer1), std::begin(globalbuffer2));
+    std::copy(std::begin(globalbuffer), std::end(globalbuffer), std::begin(globalbuffer2));
 
     if (!BUFF) { //if BUFF==false then read buffer 1, write buffer 2
       BUFF = !BUFF;
       pos=0; //initialize back the position
       testFile.println(timeLog);
       for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer1[k]!=initBuff) { //stop when you reach the last written line
+        if (globalbuffer[k]!=initBuff) { //stop when you reach the last written line
           for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-            if (globalbuffer1[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
-              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer1[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer1[k+l]);muonString += "  ";
+            if (globalbuffer[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
+              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer1[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer[k+l]);muonString += "  ";
               testFile.println(muonString);
             }
           }
-          globalbuffer1[k]=initBuff;
+          globalbuffer[k]=initBuff;
         }
       }
     }
@@ -373,7 +345,7 @@ void fileManager(void) {
       pos=0; //initialize back the position
       testFile.println(timeLog);
       for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer1[k]!=initBuff) { //stop when you reach the last written line
+        if (globalbuffer[k]!=initBuff) { //stop when you reach the last written line
           for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
             if (globalbuffer2[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
               muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer2[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer2[k+l]);muonString += "  ";
