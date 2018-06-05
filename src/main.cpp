@@ -15,7 +15,7 @@
 //DEFINE
 //-----------------------------------------------------------------------------
 
-//conso de 180mA average when active, 110mA when idle  
+//conso de 180mA average when active, 110mA when idle
 #define LED 2
 
 /* GPS DEFINES */
@@ -110,10 +110,31 @@ void setup()
 
   Blink_(LED, 50, 2);
   Serial.begin(9600);
-//  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
+
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
+  /*********************/
 
+  char dcdcSerial_command[8+0]={2, 'H', 'P', 'O', 3, 'E', 'C', 13}; //for send command, 8 Bytes + Data lengt
+  int incomingByte = 0;   // for incoming serial data
+  Serial4.begin(38400);
+  Serial4.write(dcdcSerial_command,8);
+  delay(50);
+  Serial.print("I send: ");Serial.println(dcdcSerial_command);
+  delay(1000);
+  if (Serial4.available()>0) {
+                // read the incoming byte:
+                incomingByte = Serial.read();
+
+                // say what you got:
+                Serial.print("I received: ");
+                Serial.println(incomingByte,HEX);
+                delay(100);
+        }
+  delay(4000);
+
+  /**************/
   /*SD card setup()*/
 
   Serial.println("SD card config");
