@@ -9,10 +9,10 @@
 // and IntervalTimer
 #include <IntervalTimer.h>
 #include <SD.h>
-#include <cstdio>
-#include <iostream>
-#include <fstream>
-#include <string>
+//#include <cstdio>
+//#include <iostream>
+//#include <fstream>
+//#include <string>
 #include <sstream>
 using namespace std;
 
@@ -33,7 +33,7 @@ int startTimerValue1 = 0;
 DMAChannel* dma0 = new DMAChannel(false);
 DMAChannel* dma1 = new DMAChannel(false);
 
-//ChannelsCfg order must be {CH1, CH2, CH3, CH0 }, adcbuffer output will be CH0, CH1, CH2, CH3
+//ChannelsCfg order must be {CH1, CH2, CH3, CH4, CH5, CH6, CH7, CH0 }, adcbuffer output will be CH0, CH1, CH2, CH3, CH4, CH5, CH6, CH7
 //Order must be {Second . . . . . . . . First} no matter the number of channels used.
 const uint16_t ChannelsCfg_0 [] =  { 0x4E, 0x48, 0x49, 0x46, 0x47, 0x4F, 0x44, 0x45 };  //ADC0: CH0 ad6(A6), CH1 ad7(A7), CH2 ad15(A8), CH3 ad4(A9) works
 
@@ -47,57 +47,39 @@ const int period0 = 100; // us
 unsigned long filePeriod = 30000; //ms (compared to an elapsedMillis)
 unsigned long criticTime = 50; //to test
 
-const double nbFiles=floor((flightLength*60*1000)/filePeriod);
+const double nbFiles=floor((flightLength*60*1000)/filePeriod); //number of files that should be created for a file storing filePeriod of data
 
 //Initialize the buffers
-DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE];
-static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer[GLOBAL_BUF];
-static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) copybuffer[GLOBAL_BUF];
-unsigned long timebuffer[GLOBAL_BUF/BUF_SIZE];
+DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcbuffer[BUF_SIZE]; //(muons) direct emptying of the 8 dma channels
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalbuffer[GLOBAL_BUF]; //(muons) storage of the adc output
+static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) copybuffer[GLOBAL_BUF];  //(muons) exact copy of the buffer at every loop
+unsigned long timebuffer[GLOBAL_BUF/BUF_SIZE]; //(muons) buffer storing the time at which the data are being written
 const uint16_t initBuff = 5000; //value used to initialize the buffer/as stop value
 const int thresholdMuon = 1800; //threshold over which the signal is considered to be the trace of a muon
 volatile int pos=0; //current position within the global buffers
-volatile bool BUFF=false; //choose which buffer should be filled, which one should be emptied (false: fill 1, empty 2 and vv)
-int setupIdx[]={48,48};
+int setupIdx[]={48,48}; //ascii code for 0
 int fileIdx[]={48,48};
 
 elapsedMillis debounce;
 elapsedMillis timeLog;
 elapsedMillis timecheck;
 elapsedMillis sinceFile; //allows the periodic creation of a new file
-elapsedMicros callbacktime;
+elapsedMicros callbacktime; //reference (in us) for the writing of the (muon) datalog
 
-//void dma2_isr(void);
 void dma0_isr(void);
-void d2_isr(void);
 void setup_adc() ;
 void setup_dma();
+void setup_muonFileName();
 void setup_files();
-void increment_str(int *idx, char* s);
 void increment_idx(int *idx);
+void update_str(int *idx, char* s);
 void callback(void);
-void fileManager(void);
 
-char str[10];
-
-/*
-str[9]=c;
-str[10]=c;
-str[11]=c;*/
+char muonFileName[10];
+char dataFileName[10];
 
 void setup() {
   // initialize the digital pin as an output.
-
-  str[0]='M';
-  str[1]='0';
-  str[2]='0';
-  str[3]='0';
-  str[4]='0';
-  str[5]='0';
-  str[6]='.';
-  str[7]='t';
-  str[8]='x';
-  str[9]='t';
 
   pinMode(ledPin, OUTPUT);
 
@@ -115,8 +97,6 @@ void setup() {
   if (!SD.begin(chipSelect))
   {
     Serial.println("Card failed, or not present");
-  // don't do anything more:
-  // return; //this line makes it directly jumps to loop - use the boolean setupFail instead
   } Serial.println("Card initialized.");
 
   // clear buffers (adc output should never go higher than 4095 in 12 bits config)
@@ -130,11 +110,11 @@ void setup() {
 
   delay(100);
 
-  for (int i = 0; i < GLOBAL_BUF; ++i){
+  for (int i = 0; i < GLOBAL_BUF; ++i)  { // initialize the buffer
       globalbuffer[i]=initBuff;
   }
 
-  for (int i = 0; i < GLOBAL_BUF/BUF_SIZE; ++i){
+  for (int i = 0; i < GLOBAL_BUF/BUF_SIZE; ++i) {
       timebuffer[i]=0;
   }
 
@@ -142,15 +122,9 @@ void setup() {
   setup_dma();
 
   callbacktime=0; //reset the time before initiating the callbacks
-  startTimerValue0 = timer0.begin(callback, period0);
-  //startTimerValue1 = timer1.begin(fileManager, 60000);
-  //delay(1000);
+  startTimerValue0 = timer0.begin(callback, period0); //timer on global buffering
   Serial.println("Setup end !");
 }
-
-
-
-//uint16_t analog=0; //variable that will store locally the value of the buffer
 
 void loop() {
 
@@ -160,37 +134,54 @@ void loop() {
 
   timecheck=0; //check the duration of the loop
 
-  File testFile = SD.open(str, FILE_WRITE);
+  File muonFile = SD.open(muonFileName, FILE_WRITE);
 
   String muonString = "";
 
-  if (testFile) {
+  if (muonFile) {
     std::copy(std::begin(globalbuffer), std::end(globalbuffer), std::begin(copybuffer));
     pos=0; //initialize back the position
-    testFile.println(timeLog);
+    muonFile.println(timeLog);
     for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
       if (copybuffer[k]!=initBuff) { //stop when you reach the last written line
         for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
           if (copybuffer[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
             muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer[k/BUF_SIZE]); muonString += "  "; muonString += String(copybuffer[k+l]);muonString += "  ";
-            testFile.println(muonString);
+            muonFile.println(muonString);
           }
         }
         globalbuffer[k]=initBuff;
       }
     }
   }
-    // print to the serial port too:
-  // if the file isn't open, pop up an error:
   else {
     Serial.println("error opening ");
-    Serial.println(str);
+    Serial.println(muonFileName);
   }
-  testFile.close();
+  muonFile.close();
+
+/******************************************************************************/
+/**********************************DATALOG*************************************/
+
+  File dataFile = SD.open(dataFileName, FILE_WRITE);
+
+  String dataString = "";
+
+  if (dataFile) {
+    dataString +="Les muons furent découverts par Carl David Anderson et son assistant Seth Neddermeyer, au Caltech, en 1936, alors qu'ils travaillaient sur les rayons cosmiques. Ils remarquèrent des particules dont la trajectoire s'incurvait de manière distincte de celle des électrons et des autres particules connues, lorsqu'elles étaient soumises à un champ magnétique. Ces nouvelles particules portaient une charge électrique négative mais leur trajectoire était moins incurvée que celle des électrons mais plus incurvée que celle des protons à vitesse égale. On supposait que leur charge électrique négative était égale à celle de l'électron et qu'étant donné la différence de courbure de la trajectoire, on devait en déduire qu'elles avaient une masse intermédiaire à celle de l'électron et du proton.C'est pour cela qu'Anderson nomma d'abord cette particule mesotron, dont le préfixe meso- venant du grec signifie . Comme peu après d'autres particules de masses intermédiaires furent découvertes, le terme générique de meson fut adopté pour nommer de telles particules. Face au besoin de les différencier, le mesotron fut renommé mu meson (avec la lettre grecque μ (mu) utilisée pour ressembler au son de la lettre latine m).Cependant on découvrit bientôt que le mu meson différait de manière significative des autres mésons; par exemple ses produits de désintégration comprenaient un neutrino et un antineutrino, en lieu et place de l'un ou de l'autre, comme on l'observait pour les autres mésons, ceux-ci étant des hadrons, particules formées de quarks et donc sujettes à des interactions fortes. Dans le modèle de quark, un meson est composé d'exactement deux quarks (un quark et un anti-quark), à la différence des baryons qui sont composés de trois quarks. On découvrit, cependant, que les mu mesons étaient des particules fondamentales (leptons) comme les électrons, sans structure de quark. Ainsi les mu mesons n'étant pas du tout des mésons (au sens nouvellement défini du terme méson), le terme mu meson fut abandonné et remplacé par la nouvelle appellation de muon.";
+    dataFile.println(dataString);
+  }
+  else {
+    Serial.println("error opening ");
+    Serial.println(muonFileName);
+  }
+  dataFile.close();
 
   if (sinceFile >= filePeriod) { //create a new file periodically to limit the weight on the ram
     sinceFile = sinceFile - filePeriod; //decrement and adjust for latency
-    increment_str(&(fileIdx[0]),&(str[4])); //change the file name
+    increment_idx(&(fileIdx[0]));
+    update_str(&(fileIdx[0]),&(muonFileName[4])); //change the file name
+    update_str(&(fileIdx[0]),&(dataFileName[4]));
   }
 
 /*
@@ -253,24 +244,47 @@ void setup_adc() {
 
 }
 
+void setup_fileName(char* s, char ch){
+  *s=ch;
+  *(s+1)='0';
+  *(s+2)='0';
+  *(s+3)='0';
+  *(s+4)='0';
+  *(s+5)='0';
+  *(s+6)='.';
+  *(s+7)='t';
+  *(s+8)='x';
+  *(s+9)='t';
+}
+
 void setup_files() {
 
-  for (int seti=0;seti<100;seti=seti+1) {
-    if (SD.exists(str)) {
-        increment_str(&(setupIdx[0]), &(str[1]));
+  setup_fileName(&(muonFileName[0]),'M'); //'M' for muons
+  setup_fileName(&(dataFileName[0]),'D'); //'D' for data
+
+  for (int seti=0;seti<100;seti=seti+1) { //check if the file already exists, if so increament
+    if (SD.exists(muonFileName)) {
+        increment_idx(&(setupIdx[0]));
+        update_str(&(setupIdx[0]), &(muonFileName[1]));
+        update_str(&(setupIdx[0]), &(dataFileName[1]));
         Serial.println(seti);
     }
   }
 
-  for (int setj=0;setj<nbFiles;setj=setj+1) {
-    File setupFile = SD.open(str, FILE_WRITE);
-    increment_str(&(fileIdx[0]), &(str[4])); //change the file name
+  for (int setj=0;setj<nbFiles;setj=setj+1) { //create all the files already
+    File setupFile = SD.open(muonFileName, FILE_WRITE);
+    setupFile.close();
+    setupFile = SD.open(dataFileName, FILE_WRITE);
+    setupFile.close();
+    increment_idx(&(fileIdx[0]));
+    update_str(&(fileIdx[0]), &(muonFileName[4])); //change the file name
+    update_str(&(fileIdx[0]), &(dataFileName[4])); //change the file name
   }
 
-  fileIdx[0]=48;
+  fileIdx[0]=48; //reset the id code for future openings
   fileIdx[1]=48;
-  str[4]=fileIdx[1];
-  str[5]=fileIdx[0];
+  muonFileName[4]=fileIdx[1]; dataFileName[4]=fileIdx[1];
+  muonFileName[5]=fileIdx[0]; dataFileName[5]=fileIdx[0];
 
 }
 
@@ -283,23 +297,17 @@ void dma0_isr(void) {
 }
 
 void increment_idx(int *idx) {
-
   *(idx)=*(idx)+1;
   if (*(idx)>57) {
     *(idx)=48;
     *(idx+1)=*(idx+1)+1;
   }
-
 }
 
-void increment_str(int *idx, char* s) {
-
-  increment_idx(&(*(idx)));
-
+void update_str(int *idx, char* s) {
   for (int k=0; k<2; k=k+1) {
     *(s+k)=*(idx+1-k);
   }
-
 }
 
 void callback(void) {
@@ -312,65 +320,3 @@ void callback(void) {
   }
   pos = pos + BUF_SIZE;
 }
-
-/*
-
-void fileManager(void) {
-
-  File testFile = SD.open(str, FILE_WRITE);
-
-  String muonString = "";
-
-  if (testFile) {
-    std::copy(std::begin(globalbuffer), std::end(globalbuffer), std::begin(globalbuffer2));
-
-    if (!BUFF) { //if BUFF==false then read buffer 1, write buffer 2
-      BUFF = !BUFF;
-      pos=0; //initialize back the position
-      testFile.println(timeLog);
-      for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer[k]!=initBuff) { //stop when you reach the last written line
-          for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-            if (globalbuffer[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
-              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer1[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer[k+l]);muonString += "  ";
-              testFile.println(muonString);
-            }
-          }
-          globalbuffer[k]=initBuff;
-        }
-      }
-    }
-    else {
-      BUFF = !BUFF;
-      pos=0; //initialize back the position
-      testFile.println(timeLog);
-      for (int k=0;k<GLOBAL_BUF;k=k+BUF_SIZE) { //go through the buffer
-        if (globalbuffer[k]!=initBuff) { //stop when you reach the last written line
-          for (int l=0;l<BUF_SIZE;l=l+1) { //go through each pin
-            if (globalbuffer2[k+l]>thresholdMuon) { //only write if the buffer respects the threshold
-              muonString = "A"; muonString += String(l); muonString += "  "; muonString += String(timebuffer2[k/BUF_SIZE]); muonString += "  "; muonString += String(globalbuffer2[k+l]);muonString += "  ";
-              testFile.println(muonString);
-            }
-          }
-          globalbuffer2[k]=initBuff;
-        }
-      }
-    }
-  }
-    // print to the serial port too:
-  // if the file isn't open, pop up an error:
-  else {
-    Serial.println("error opening ");
-    Serial.println(str);
-  }
-  testFile.close();
-
-  if (sinceFile >= filePeriod) { //create a new file periodically to limit the weight on the ram
-    sinceFile = sinceFile - filePeriod; //decrement and adjust for latency
-    increment_str(&(fileIdx[0]),&(str[4])); //change the file name
-  }
-
-  Serial.println(timecheck);
-
-  timecheck=0; //check the duration of the loop
-}*/
