@@ -10,6 +10,7 @@
 #include <TinyGPS++.h>
 #include <utils.h>
 #include <cmath>
+#include <string>
 
 //-----------------------------------------------------------------------------
 //DEFINE
@@ -157,14 +158,11 @@ void loop()
 {
   /*********************/
 
-  char dcdcSerial_command[8+0]={0x02,0x48,0x50,0x4f,0x03,0x45,0x43,0x0d}; //for send command, 8 Bytes + Data lengt
+  char dcdcSerial_command[8]={0x02,0x48,0x50,0x4f,0x03,0x45,0x43,0x0d}; //for send command, 8 Bytes + Data lengt
   int incomingByte = 0;   // for incoming serial data
-  std::string command="";command+=0x02;command+=0x48;command+=0x50;command+=0x4f;command+=0x03;command+=0x45;command+=0x43;command+=0x0d;
   Serial4.begin(38400);
   Serial4.write(dcdcSerial_command);
   delay(50);
-  //Serial4.write(dcdcSerial_command);
-  Serial4.print(command);
   Serial.print("I send: ");Serial.println(dcdcSerial_command);
   delay(100);
 
@@ -174,7 +172,7 @@ void loop()
 
                 // say what you got:
                 Serial.print("I received: ");
-                Serial.println(incomingByte,HEX);
+                Serial.println(incomingByte);
                 delay(100);
         }
   delay(400);
