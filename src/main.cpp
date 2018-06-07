@@ -20,7 +20,7 @@
 
 /* GPS DEFINES */
 
-#define GPSSerial Serial1
+#define GPSSerial Serial4
 #define GPSECHO true
 //Adafruit_GPS GPS(&mySerial);
 static const uint32_t GPSBaud = 4800;
@@ -93,7 +93,7 @@ float liftoffPr = 0.0; //last pressure measured before liftoff, should be passed
 void setup()
 {
 
-  delay(10000); //10 seconds delay before the setup actually starts allow to display the messages correctly
+  delay(2000); //10 seconds delay before the setup actually starts allow to display the messages correctly
 
   pinMode(LED, OUTPUT);
   pinMode(EN_RF, OUTPUT);
@@ -157,23 +157,27 @@ void loop()
 {
   /*********************/
 
-  char dcdcSerial_command[8+0]={2, 'H', 'P', 'O', 3, 'E', 'C', 13}; //for send command, 8 Bytes + Data lengt
+  char dcdcSerial_command[8+0]={0x02,0x48,0x50,0x4f,0x03,0x45,0x43,0x0d}; //for send command, 8 Bytes + Data lengt
   int incomingByte = 0;   // for incoming serial data
+  std::string command="";command+=0x02;command+=0x48;command+=0x50;command+=0x4f;command+=0x03;command+=0x45;command+=0x43;command+=0x0d;
   Serial4.begin(38400);
-  Serial4.write(dcdcSerial_command,8);
+  Serial4.write(dcdcSerial_command);
   delay(50);
+  //Serial4.write(dcdcSerial_command);
+  Serial4.print(command);
   Serial.print("I send: ");Serial.println(dcdcSerial_command);
-  delay(1000);
+  delay(100);
+
   if (Serial4.available()>0) {
                 // read the incoming byte:
-                incomingByte = Serial.read();
+                incomingByte = Serial4.read();
 
                 // say what you got:
                 Serial.print("I received: ");
                 Serial.println(incomingByte,HEX);
                 delay(100);
         }
-  delay(4000);
+  delay(400);
 
   /**************/
 }
