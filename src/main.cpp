@@ -114,27 +114,7 @@ void setup()
 
   Blink_(LED, 50, 1);
   Serial.println("setup() START");
-  /*********************/
 
-  char dcdcSerial_command[8+0]={2, 'H', 'P', 'O', 3, 'E', 'C', 13}; //for send command, 8 Bytes + Data lengt
-  int incomingByte = 0;   // for incoming serial data
-  Serial4.begin(38400);
-  Serial4.write(dcdcSerial_command,8);
-  delay(50);
-  Serial.print("I send: ");Serial.println(dcdcSerial_command);
-  delay(1000);
-  if (Serial4.available()>0) {
-                // read the incoming byte:
-                incomingByte = Serial.read();
-
-                // say what you got:
-                Serial.print("I received: ");
-                Serial.println(incomingByte,HEX);
-                delay(100);
-        }
-  delay(4000);
-
-  /**************/
   /*SD card setup()*/
 
   Serial.println("SD card config");
@@ -159,30 +139,6 @@ void setup()
     Serial.println("Failed to initialize BME280! Is the sensor connected?");
   }
 
-  /*START RF */
-
-  Serial.println("RF config");
-  digitalWrite(RFM95_RST, LOW);
-  delay(10);
-  digitalWrite(RFM95_RST, HIGH);
-  delay(10);
-  if (not rf95.init()) {
-    setupFail=true;
-    Serial.println("LoRa radio int failed");
-  }
-
-  if (!rf95.setFrequency(RFM95_FREQ))
-  {
-    setupFail=true;
-    Serial.println("setFrequency failed");
-  }
-  else
-  {
-    Serial.print("Set Freq to: \t");
-    Serial.println(RFM95_FREQ);
-  }
-  rf95.setTxPower(23, false);
-
   while(setupFail==true)  //buzzer being extremely annoying when the setup has failed
   {
     Blink_(LED, 50, 1);
@@ -190,60 +146,6 @@ void setup()
   }
 
   Serial.println("setup() END");
-
-//-----------------------------------------------------------------------------
-//ACCELERATION TRIGGERS !
-//-----------------------------------------------------------------------------
-
-//  while (!Serial){ delay(1);} // wait until serial console is open, remove if not tethered to computer
-
-  sinceAccTest = 0; //set it back to 0 before actually starting to measure
-  sincePrCalib = 0; //idem
-
-  while(liftoff==false) {
-
-    /*Calibration of the pressure sensor for the altimeter (every minute) */
-
-    if (sincePrCalib >= calibPeriod) { //average the sum and transfer it to the test value every thresholdLength
-      sincePrCalib = sincePrCalib - calibPeriod; //decrement and adjust for latency
-      prevPr=currentPr;
-      currentPr=bme.readPressure();
-    }
-
-    /*Trigger creation*/
-
-    Serial.println("tempAcc : ");
-    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER); //total acceleration (gravity included)
-    float tempAcc= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
-    tempAcc= sqrt(tempAcc);
-    Serial.println(tempAcc);
-
-    sumAcc = sumAcc + tempAcc; //sum the current acceleration with the previous ones
-    nbAcc = nbAcc + 1; //increment the number of accelerations stored in sumAcc
-
-    if (sinceAccTest >= thresholdLength) { //average the sum and transfer it to the test value every thresholdLength
-      sinceAccTest = sinceAccTest - thresholdLength; //decrement and adjust for latency
-      testAcc = sumAcc / nbAcc; //perform the average
-      sumAcc = 0; //empty the buffer
-      nbAcc=0; //reinitialize the counter
-    }
-
-    Serial.println("testAcc : ");
-    Serial.println(testAcc);
-
-    Serial.println("pressure : ");
-    Serial.println(bme.readPressure());
-
-    if(testAcc>thresholdAcc || bme.readPressure()>thresholdPr)//threshold on both the acceleration and pressure
-    {
-      liftoff=true;
-      liftoffPr=prevPr; //calibrate the pressure for the altimeter
-      Serial.println("liftoff!");
-    }
-
-  }
-
-  Blink_(LED, 50, 3);
 
 }
 
@@ -253,63 +155,25 @@ void setup()
 
 void loop()
 {
-  while (Serial1.available() > 0){
-    char c = Serial1.read();
-    if (gps.encode(c)){
-      gps_sentence_decoded=true;
-    }
-  }
-  if(gps_sentence_decoded){//Note for GS : same gps as your
-    displayInfo(gps);//Print on USB Serial
-  }
+  /*********************/
 
-  if (millis() > 5000 && gps.charsProcessed() < 10)
-    {
-      Serial.println(F("No GPS detected: check wiring."));
-      //while(true);
-    }
-//*/
+  char dcdcSerial_command[8+0]={2, 'H', 'P', 'O', 3, 'E', 'C', 13}; //for send command, 8 Bytes + Data lengt
+  int incomingByte = 0;   // for incoming serial data
+  Serial4.begin(38400);
+  Serial4.write(dcdcSerial_command,8);
+  delay(50);
+  Serial.print("I send: ");Serial.println(dcdcSerial_command);
+  delay(1000);
+  if (Serial4.available()>0) {
+                // read the incoming byte:
+                incomingByte = Serial.read();
 
-//datastring for sdcard
-String dataString = "";
+                // say what you got:
+                Serial.print("I received: ");
+                Serial.println(incomingByte,HEX);
+                delay(100);
+        }
+  delay(4000);
 
-  BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readPressure()/100.};//False for last one
-  CreateTelemetryDatagram_GPS(gps.location.lat(),gps.location.lng(),gps.altitude.meters(),time,dataGPS);
-  createTelemetryDatagram(bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER)/9.81,bno.getVector(Adafruit_BNO055::VECTOR_EULER), baro, 0, datas);
-
-  Serial.println("sending and writing : ");
-  Serial.print("gps datagram : ");
-
-  for(int i = 0; i<=GPS_PACKET_SIZE; i++){
-        dataString += String(dataGPS[i]);
-  }Serial.println();
-  dataString += " | ";
-
-  Serial.print("telemetry datagram : ");
-
-  for(int i = 0; i<SENSOR_PACKET_SIZE; i++){
-    dataString += String(datas[i]);
-  }Serial.println();
-dataString += " - ";
-
-File dataFile = SD.open("datalog.txt", FILE_WRITE);
-
-  // if the file is available, write to it:
-  if (dataFile) {
-    dataFile.println(dataString);
-    dataFile.close();
-    // print to the serial port too:
-    Serial.println(dataString);
-  }
-  // if the file isn't open, pop up an error:
-  else {
-    Serial.println("error opening datalog.txt");
-  }
-
- rf95.send(datas,sizeof(datas));
- delay(250);
- rf95.send(dataGPS, GPS_PACKET_SIZE);
- Serial.println("end of send telemetry");
- Blink_(LED,25,1);
- delay(250);
+  /**************/
 }
