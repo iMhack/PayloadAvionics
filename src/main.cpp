@@ -23,7 +23,7 @@
 
 /* GPS DEFINES */
 
-#define GPSSerial Serial4
+#define GPSSerial Serial1
 #define GPSECHO true
 //Adafruit_GPS GPS(&mySerial);
 static const uint32_t GPSBaud = 4800;
