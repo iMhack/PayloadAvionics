@@ -1,4 +1,3 @@
-
 #include <TeensyThreads.h>
 #include <SPI.h>
 #include <SD.h>
@@ -11,10 +10,13 @@
 #include <utils.h>
 #include <cmath>
 #include <string>
+#include <uart.h>
 
 //-----------------------------------------------------------------------------
 //DEFINE
 //-----------------------------------------------------------------------------
+
+//typedef bitset<8> BYTE;
 
 //conso de 180mA average when active, 110mA when idle
 #define LED 2
@@ -146,6 +148,11 @@ void setup()
     delay(100);
   }
 
+  //Serial4.begin(38400,SERIAL_8E1);
+  uart_init(38400);
+
+  delay(1000);
+
   Serial.println("setup() END");
 
 }
@@ -158,24 +165,32 @@ void loop()
 {
   /*********************/
 
-  char dcdcSerial_command[8]={0x02,0x48,0x50,0x4f,0x03,0x45,0x43,0x0d}; //for send command, 8 Bytes + Data lengt
-  int incomingByte = 0;   // for incoming serial data
-  Serial4.begin(38400);
-  Serial4.write(dcdcSerial_command);
-  delay(50);
-  Serial.print("I send: ");Serial.println(dcdcSerial_command);
-  delay(100);
-
-  if (Serial4.available()>0) {
+  unsigned char dcdcSerial_command[8]={0x02,'h','p','o',0x03,0x45,0x43,0x0d}; //for send command, 8 Bytes + Data lengt
+  unsigned char incomingByte=0;   // for incoming serial data
+  for (int i=0;i<8;i++) uart_putchar(dcdcSerial_command[i]);
+  //Serial4.write(dcdcSerial_command);
+  /*Serial4.write(0x02);
+  Serial4.write('h');
+  Serial4.write('p');
+  Serial4.write('o');
+  Serial4.write(0x03);
+  Serial4.write(0x45);
+  Serial4.write(0x43);
+  Serial4.write(0x0d);*/
+  //delay(50);
+  //Serial.print("I send: ");Serial.println(dcdcSerial_command);
+  delay(1000);
+  //Serial4.flush();
+  while (uart_available()) {
                 // read the incoming byte:
-                incomingByte = Serial4.read();
+                incomingByte = uart_getchar();
 
                 // say what you got:
                 Serial.print("I received: ");
-                Serial.println(incomingByte);
+                Serial.println(incomingByte,HEX);
                 delay(100);
         }
-  delay(400);
+  delay(3000);
 
   /**************/
 }
