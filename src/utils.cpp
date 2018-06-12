@@ -193,6 +193,7 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
   write32f(euler[2],datas,currentPos);
   write32f(baro.temperature,datas,currentPos);
   write32f(baro.pressure,datas,currentPos);
+  write32f(0,datas,currentPos);
 
   for (int i = 10; i < currentPos; ++i)
    {
