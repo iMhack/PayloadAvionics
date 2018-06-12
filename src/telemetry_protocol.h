@@ -12,7 +12,7 @@
 
 enum DatagramPayloadType {
 	//first byte: vehicle ID, second byte: payload type
-    TELEMETRY = 0x10, EVENT = 0x11, CONTROL = 0x12, GPS = 0x13, TELEMETRY_ERT18 = 14
+    TELEMETRY = 0x10, EVENT = 0x11, CONTROL = 0x12, GPS = 0x13, TELEMETRY_ERT18 = 0x14
 };
 
 
@@ -30,7 +30,7 @@ enum DatagramPayloadType {
 #define CHECKSUM_SIZE 2
 #define TOTAL_OVERHEAD (PREAMBLE_SIZE + HEADER_SIZE + CONTROL_FLAG_SIZE + CHECKSUM_SIZE)
 
-#define SENSOR_PACKET_SIZE (36 + TOTAL_OVERHEAD)
+#define SENSOR_PACKET_SIZE (40 + TOTAL_OVERHEAD)
 #define GPS_PACKET_SIZE (21 + TOTAL_OVERHEAD)
 
 #endif /* TELEMETRY_TELEMETRY_PROTOCOL_H_ */
