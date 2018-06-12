@@ -11,7 +11,8 @@
 
 
 enum DatagramPayloadType {
-    TELEMETRY = 0x00, EVENT = 0x01, CONTROL = 0x02, GPS = 0x03, TELEMETRY_ERT18 = 18
+	//first byte: vehicle ID, second byte: payload type
+    TELEMETRY = 0x10, EVENT = 0x11, CONTROL = 0x12, GPS = 0x13, TELEMETRY_ERT18 = 14
 };
 
 
