@@ -185,7 +185,6 @@ void createTelemetryDatagram (imu::Vector<3> accel, imu::Vector<3> euler, BARO_d
 //  Serial.println(accel[2]);
   write32u(measurement_time,datas,currentPos);// POS -> 10-13 -> 14
   write32f(accel[0],datas,currentPos);
-  Serial.println(accel[0]);
   write32f(accel[1],datas,currentPos);
   write32f(accel[2],datas,currentPos);
   write32f(euler[0],datas,currentPos);
