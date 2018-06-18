@@ -71,8 +71,9 @@ char dataFileName[10];
 
 //RF transmission
 
-unsigned long rfPeriod = 250; //ms (compared to an elapsedMillis)
-unsigned long emissionTrigger = 3000; //time after liftoff before emission, ms (compared to an elapsedMillis)
+int RF=0; //switch between telemetry and GPS datagrams
+unsigned long rfPeriod = 400; //ms (compared to an elapsedMillis)
+unsigned long emissionTrigger = 30000; //time after liftoff before emission, ms (compared to an elapsedMillis)
 
 //Initialize the buffers
 DMAMEM static volatile uint16_t __attribute__((aligned(BUF_SIZE+0))) adcBuffer[BUF_SIZE]; //(muons) direct emptying of the 8 dma channels
@@ -81,7 +82,8 @@ static  uint16_t __attribute__((aligned(GLOBAL_BUF+0))) globalBufferCopy[GLOBAL_
 unsigned long timeBuffer[GLOBAL_BUF/BUF_SIZE]; //(muons) buffer storing the time at which the data are being written
 unsigned long timeBufferCopy[GLOBAL_BUF/BUF_SIZE]; //(muons) buffer storing the time at which the data are being written
 const uint16_t initBuff = 5000; //value used to initialize the buffer/as stop value
-int thresholdMuon[] = {300,300,300,300,300,300,300,300}; //threshold over which the signal is considered to be the trace of a muon
+int thresholdMuon[] = {4095,4095,4095,4095,4095,4095,4095,4095}; //threshold over which the signal is considered to be the trace of a muon
+int nSTD=5; //nb of std dev used to create the threshold
 
 //Timing functions
 
@@ -101,7 +103,7 @@ elapsedMicros callbacktime; //reference (in us) for the writing of the (muon) da
 #define GPSSerial Serial1
 #define GPSECHO true
 //Adafruit_GPS GPS(&mySerial);
-static const uint32_t GPSBaud = 4800;
+static const uint32_t GPSBaud = 9600;
 TinyGPSPlus gps;
 bool gps_sentence_decoded=false;
 
@@ -148,7 +150,7 @@ unsigned long thresholdLength=500; //length in ms during which the acceleration 
 unsigned int nbAcc=0; //number of accelration values stored in sumAcc during thresholdLength
 float sumAcc=0.0; //initialize the variable that will store the sum of the accelerations during the previous thresholdLength
 float testAcc = 0.0; //average of the accleration over thresholdLength
-float thresholdAccG = 5; //threshold on testAcc in G
+float thresholdAccG = 3; //threshold on testAcc in G
 float thresholdAcc = thresholdAccG*9.81; //threshold on testAcc in m/s^2
 
 /* PRESSURE TRIGGER */ //detects the overpressure occurring at ejection
@@ -161,7 +163,7 @@ float liftoffPr = 98000; //last pressure measured before liftoff, should be pass
 
 /* ALTITUDE TRIGGER */
 
-float thresholdAlt=1000; //the acquisition will be triggered anyway if we reach an altitude larger than this trigger
+float thresholdAlt=1500; //the acquisition will be triggered anyway if we reach an altitude larger than this trigger
 
 void dma0_isr(void);
 void setup_buffers();
@@ -175,7 +177,8 @@ void setup_muonFileName();
 void setup_files();
 void increment_idx(int *idx);
 void update_str(int *idx, char* s);
-void thresholdMuonCalc(uint16_t *tab, int sizetab, int *threshold);
+void thresholdMuonCalc(uint16_t *tab, int *threshold);
+int myPow(int x, int p);
 void callbackMuon(void);
 
 
@@ -215,12 +218,17 @@ void setup() {
   setup_adc();
   setup_dma();
 
+  while(setupFail==true)  //buzzer being extremely annoying when the setup has failed
+  {
+    Blink_(BUZZER, 50, 1);
+    delay(100);
+  }
+
   //-----------------------------------------------------------------------------
   //ACCELERATION TRIGGERS !
   //-----------------------------------------------------------------------------
 
 /*
-
   sinceAccTest = 0; //set it back to 0 before actually starting to measure
   sincePrCalib = 0; //idem
 
@@ -270,7 +278,6 @@ void setup() {
   Serial.println("Setup end !");
 }
 
-
 /******************************************************************************/
 /***************************** Start the loop *********************************/
 
@@ -278,6 +285,7 @@ void loop() {
 
   /*****************************************************************************/
   /**********************************MUONLOG************************************/
+Serial.println("new loop");
 
   while (timecheck<pseudoLoopPeriod); //pseudo-synchronisation that doesn't require an interrupt/callback
 
@@ -304,7 +312,7 @@ void loop() {
             //muonFile.println(muonString);
           }
         }
-        if (k>100) globalBuffer[k]=initBuff; //give some time to the SD writing to catch up so it doesn't overwrite new data
+        if (k>1000) globalBuffer[k]=initBuff; //give some time to the SD writing to catch up so it doesn't overwrite new data
       }
       else {
         stopBuff=k+BUF_SIZE; //stop buffer for the median calculation
@@ -319,11 +327,10 @@ void loop() {
   }
   muonFile.close();
 
-  //Serial.println("thresholds");
-  /*thresholdMuonCalc(&globalBufferCopy[0], stopBuff, &thresholdMuon[0]);
-  for (int tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-    Serial.println(thresholdMuon[tMCl]);
-  }*/
+  Serial.println("timeLogs:");
+  Serial.println(timeLog);
+  thresholdMuonCalc(&globalBufferCopy[0], &thresholdMuon[0]);
+  Serial.println(timeLog);
 
 /******************************************************************************/
 /**********************************DATALOG*************************************/
@@ -340,13 +347,6 @@ void loop() {
   if(gps_sentence_decoded){//Note for GS : same gps as your
     displayInfo(gps);//Print on USB Serial
   }*/
-
-  /*if (millis() > 5000 && gps.charsProcessed() < 10)
-    {
-      Serial.println(F("No GPS detected: check wiring."));
-      //while(true);
-    }*/
-
 
   //Keep commented until new version
   /*while (Serial1.available() > 0){
@@ -396,56 +396,72 @@ void loop() {
   }
   dataFile.close();
 
-  //Create the datagrams before sending them
-
-  //CreateTelemetryDatagram_GPS(lat,lng,hGPS,timeLog,dataGPS);
-  //createTelemetryDatagram(accel, euler, baro, timeLog, datas);
-
-  //rf95.send(datas,sizeof(datas));
-  //delay(200); //necessary
-  /*rf95.send(dataGPS, GPS_PACKET_SIZE);
-  */
 
   //Periodically send the datagrams to the ground station
-  //Serial.println(timeLog);
-  if (timeLog> emissionTrigger)  {
+  if (timeLog> emissionTrigger)  { //start emitting 30s after liftoff
     if (sinceRF > rfPeriod) {
       sinceRF = sinceRF - rfPeriod; //decrement and adjust for latency
-      while (Serial1.available() > 0){
-        char c = Serial1.read();
-        if (gps.encode(c)){
-          gps_sentence_decoded=true;
+      if (RF==0) { //alternatively send GPS or telemetry
+        while (Serial1.available() > 0){
+          char c = Serial1.read();
+          if (gps.encode(c))  {
+            gps_sentence_decoded=true;
+          }
         }
+        if(gps_sentence_decoded){//Note for GS : same gps as your
+          displayInfo(gps);//Print on USB Serial
+        }
+        double lat=gps.location.lat();
+        double lng=gps.location.lng();
+        double alt=gps.altitude.meters();
+        CreateTelemetryDatagram_GPS(lat,lng,alt,timeLog,dataGPS);
+        rf95.send(dataGPS, GPS_PACKET_SIZE);
+        RF=1;
       }
-      if(gps_sentence_decoded){//Note for GS : same gps as your
-        displayInfo(gps);//Print on USB Serial
+      else {
+        createTelemetryDatagram(accel/9.81, euler, baro, timeLog, datas);
+        rf95.send(datas,sizeof(datas));
+        RF=0;
       }
-      double lat=gps.location.lat();
-      double lng=gps.location.lng();
-      double alt=gps.altitude.meters();
-      Serial.println("gps");
-      Serial.println(lat);
-      Serial.println(lng);
-      Serial.println(alt);
-      //CreateTelemetryDatagram_GPS(lat,lng,hGPS,timeLog,dataGPS);
-      createTelemetryDatagram(accel, euler, baro, timeLog, datas);
-      //Blink_(BUZZER,50,1);
-    //  delay(150);
-      rf95.send(datas,sizeof(datas));
-      //delay(200); //necessary ? probably
-      //rf95.send(dataGPS, GPS_PACKET_SIZE);
     }
   }
+
   //Periodically create new files
   if (sinceFile >= filePeriod) { //create a new file periodically to limit the weight on the ram
-    //sinceFile = sinceFile - filePeriod; //decrement and adjust for latency
     sinceFile = sinceFile-filePeriod; //decrement and adjust for latency
     increment_idx(&(fileIdx[0]));
     update_str(&(fileIdx[0]),&(muonFileName[4])); //change the file name
     update_str(&(fileIdx[0]),&(dataFileName[4]));
   }
 
+
+/****************************Flight termination********************************/
+  while (timeLog > flightLengthMs) {
+    Serial.println("finito !");
+    Blink_(BUZZER,50,1);
+    delay(200);/*
+    while (Serial1.available() > 0){
+      char c = Serial1.read();
+      if (gps.encode(c))  {
+        gps_sentence_decoded=true;
+      }
+    }
+    if(gps_sentence_decoded){//Note for GS : same gps as your
+      displayInfo(gps);//Print on USB Serial
+    }
+    double lat=gps.location.lat();
+    double lng=gps.location.lng();
+    double alt=gps.altitude.meters();
+    CreateTelemetryDatagram_GPS(lat,lng,alt,timeLog,dataGPS);
+    rf95.send(dataGPS, GPS_PACKET_SIZE);*/
+    delay(200);
+  }
 }
+
+
+
+/*******************************End of loop************************************/
+
 
 
 /******************************************************************************/
@@ -496,7 +512,6 @@ void setup_rf() {
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
-  //rf95.setModemConfig(BW500CR45SF128);
   if (not rf95.init()) {
     setupFail=true;
     Serial.println("LoRa radio int failed");
@@ -631,35 +646,56 @@ void update_str(int *idx, char* s) {
   }
 }
 
-void thresholdMuonCalc(uint16_t *tab, int sizetab, int *threshold) {
+void thresholdMuonCalc(uint16_t *tab, int *threshold) {
   //calculate std device
-  uint16_t sum[] = {0,0,0,0,0,0,0,0}, mean[] = {0,0,0,0,0,0,0,0}, standardDeviation[] = {0,0,0,0,0,0,0,0};
+  uint32_t sum[] = {0,0,0,0,0,0,0,0}, mean[] = {0,0,0,0,0,0,0,0};
+  float standardDeviation[] = {0,0,0,0,0,0,0,0};
+  int count=0;
 
   int tMCk,tMCl;
-  for (tMCk=0;tMCk<sizetab-BUF_SIZE+1;tMCk+=BUF_SIZE) { //go through the buffer
+  for (tMCk=0;tMCk<GLOBAL_BUF-BUF_SIZE+1;tMCk+=BUF_SIZE) { //go through the buffer
     for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-      sum[tMCl] += *(tab+tMCk+tMCl);
-    }
-  }
-  for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-    mean[tMCl]=sum[tMCl]/(sizetab/BUF_SIZE);
-  }
-  for (tMCk=0;tMCk<sizetab-BUF_SIZE+1;tMCk+=BUF_SIZE) { //go through the buffer
-    for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-      standardDeviation[tMCl] += pow(*(tab+tMCk+tMCl) - mean[tMCl], 2);
-    }
-  }
-  if ((sizetab-1) != 0) {
-    for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-      standardDeviation[tMCl] = standardDeviation[tMCl] /floor ((sizetab/BUF_SIZE)-1);
+      if ((*(tab+tMCk+tMCl))!=initBuff) {
+        sum[tMCl] += *(tab+tMCk+tMCl);
+        count+=1;
+      }
     }
   }
 
-  //*threshold=*(tab+(*sizetab)/2)+standardDeviation; //threshold is median + n*std_dev
+  count=floor(count/BUF_SIZE);
+
   for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
-    *(threshold+tMCl)=mean[tMCl]+standardDeviation[tMCl];
+    mean[tMCl]=sum[tMCl]/count;
   }
 
+  for (tMCk=0;tMCk<GLOBAL_BUF-BUF_SIZE+1;tMCk+=BUF_SIZE) { //go through the buffer
+    for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
+      if (*(tab+tMCk+tMCl)!=initBuff) {
+        standardDeviation[tMCl] += myPow((*(tab+tMCk+tMCl) - mean[tMCl]), 2);
+      }
+    }
+  }
+
+  if ((count-1) != 0) {
+    for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
+      standardDeviation[tMCl] = floor(sqrt(standardDeviation[tMCl]/(count-1)));
+    }
+  }
+
+  for (tMCl=0;tMCl<BUF_SIZE;tMCl+=1)  {
+    *(threshold+tMCl)=mean[tMCl]+nSTD*standardDeviation[tMCl];
+  }
+}
+
+
+int myPow(int x, int p)
+{
+  if (p == 0) return 1;
+  if (p == 1) return x;
+
+  int tmp = myPow(x, p/2);
+  if (p%2 == 0) return tmp * tmp;
+  else return x * tmp * tmp;
 }
 
 void callbackMuon(void) {
@@ -673,9 +709,3 @@ void callbackMuon(void) {
     pos = pos + BUF_SIZE;
   }
 }
-
-/*Should the data be saved through a timer/buffer as well ? probably not
-void callbackData(void) {
-
-
-}*/
