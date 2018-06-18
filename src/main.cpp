@@ -68,6 +68,7 @@ int setupIdx[]={48,48}; //ascii code for 0
 int fileIdx[]={48,48};
 char muonFileName[10];
 char dataFileName[10];
+char gpsFileName[10];
 
 //RF transmission
 
@@ -150,7 +151,7 @@ unsigned long thresholdLength=500; //length in ms during which the acceleration 
 unsigned int nbAcc=0; //number of accelration values stored in sumAcc during thresholdLength
 float sumAcc=0.0; //initialize the variable that will store the sum of the accelerations during the previous thresholdLength
 float testAcc = 0.0; //average of the accleration over thresholdLength
-float thresholdAccG = 3; //threshold on testAcc in G
+float thresholdAccG = 5; //threshold on testAcc in G
 float thresholdAcc = thresholdAccG*9.81; //threshold on testAcc in m/s^2
 
 /* PRESSURE TRIGGER */ //detects the overpressure occurring at ejection
@@ -173,10 +174,10 @@ void setup_bme();
 void setup_rf();
 void setup_dma();
 void setup_adc();
-void setup_muonFileName();
 void setup_files();
 void increment_idx(int *idx);
 void update_str(int *idx, char* s);
+void triggerAcquisition(void);
 void thresholdMuonCalc(uint16_t *tab, int *threshold);
 int myPow(int x, int p);
 void callbackMuon(void);
@@ -271,11 +272,15 @@ void setup() {
       Serial.println("liftoff!");
     }
   }
-*/
+
   timeLog=0;
   callbacktime=0; //reset the time before initiating the callbacks
   startTimerValueMuon = timerMuon.begin(callbackMuon, periodMuon); //timer on global buffering
-  Serial.println("Setup end !");
+  Serial.println("Setup end !");*/
+
+  sinceAccTest = 0; //set it back to 0 before actually starting to measure
+  sincePrCalib = 0; //idem
+
 }
 
 /******************************************************************************/
@@ -283,6 +288,22 @@ void setup() {
 
 void loop() {
 
+
+/************************************TRIGGER************************************/
+  while(liftoff==false) {
+
+    triggerAcquisition();
+
+    if (liftoff==true)  {
+      delay(emissionTrigger);
+      sinceRF=0;
+      sinceFile=0;
+      timeLog=0;
+      callbacktime=0; //reset the time before initiating the callbacks
+      startTimerValueMuon = timerMuon.begin(callbackMuon, periodMuon); //timer on global buffering
+    }
+
+}
   /*****************************************************************************/
   /**********************************MUONLOG************************************/
 Serial.println("new loop");
@@ -327,46 +348,10 @@ Serial.println("new loop");
   }
   muonFile.close();
 
-  Serial.println("timeLogs:");
-  Serial.println(timeLog);
   thresholdMuonCalc(&globalBufferCopy[0], &thresholdMuon[0]);
-  Serial.println(timeLog);
 
 /******************************************************************************/
 /**********************************DATALOG*************************************/
-
-  //GPS data first
-
-  /*this might be needed*/ /*
-  while (Serial1.available() > 0){
-    char c = Serial1.read();
-    if (gps.encode(c)){
-      gps_sentence_decoded=true;
-    }
-  }
-  if(gps_sentence_decoded){//Note for GS : same gps as your
-    displayInfo(gps);//Print on USB Serial
-  }*/
-
-  //Keep commented until new version
-  /*while (Serial1.available() > 0){
-    char c = Serial1.read();
-    if (gps.encode(c)){
-      gps_sentence_decoded=true;
-    }
-  }
-  if(gps_sentence_decoded){//Note for GS : same gps as your
-    displayInfo(gps);//Print on USB Serial
-  }
-  double lat=gps.location.lat();
-  double lng=gps.location.lng();
-  double alt=gps.altitude.meters();
-  Serial.println("gps");
-  Serial.println(lat);
-  Serial.println(lng);
-  Serial.println(alt);*/
-
-  //CreateTelemetryDatagram_GPS(lat,lng,hGPS,timeLog,dataGPS);
 
   //Altimeter data
   BARO_data baro = (BARO_data){bme.readTemperature(), bme.readPressure()/100., bme.readAltitude(liftoffPr/100)}; //good one
@@ -392,37 +377,53 @@ Serial.println("new loop");
   }
   else {
     Serial.println("error opening ");
-    Serial.println(muonFileName);
+    Serial.println(dataFileName);
   }
   dataFile.close();
 
 
   //Periodically send the datagrams to the ground station
-  if (timeLog> emissionTrigger)  { //start emitting 30s after liftoff
-    if (sinceRF > rfPeriod) {
-      sinceRF = sinceRF - rfPeriod; //decrement and adjust for latency
-      if (RF==0) { //alternatively send GPS or telemetry
-        while (Serial1.available() > 0){
-          char c = Serial1.read();
-          if (gps.encode(c))  {
-            gps_sentence_decoded=true;
-          }
+  if (sinceRF > rfPeriod) {
+    sinceRF = sinceRF - rfPeriod; //decrement and adjust for latency
+    if (RF==0) { //alternatively send GPS or telemetry
+      while (Serial1.available() > 0){
+        char c = Serial1.read();
+        if (gps.encode(c))  {
+          gps_sentence_decoded=true;
         }
-        if(gps_sentence_decoded){//Note for GS : same gps as your
-          displayInfo(gps);//Print on USB Serial
-        }
-        double lat=gps.location.lat();
-        double lng=gps.location.lng();
-        double alt=gps.altitude.meters();
-        CreateTelemetryDatagram_GPS(lat,lng,alt,timeLog,dataGPS);
-        rf95.send(dataGPS, GPS_PACKET_SIZE);
-        RF=1;
+      }
+      if(gps_sentence_decoded){//Note for GS : same gps as your
+        displayInfo(gps);//Print on USB Serial
+      }
+      double lat=gps.location.lat();
+      double lng=gps.location.lng();
+      double alt=gps.altitude.meters();
+      CreateTelemetryDatagram_GPS(lat,lng,alt,timeLog,dataGPS);
+      rf95.send(dataGPS, GPS_PACKET_SIZE);
+
+      String gpsString="";
+
+      for (int gpsi=0;gpsi<GPS_PACKET_SIZE;gpsi++)  {
+        gpsString += String(dataGPS[gpsi]);
+      }
+
+      File gpsFile = SD.open(gpsFileName, FILE_WRITE);
+
+      if (gpsFile) {
+        gpsFile.println(gpsString);
       }
       else {
-        createTelemetryDatagram(accel/9.81, euler, baro, timeLog, datas);
-        rf95.send(datas,sizeof(datas));
-        RF=0;
+        Serial.println("error opening ");
+        Serial.println("gps file");
       }
+      gpsFile.close();
+
+      RF=1;
+    }
+    else {
+      createTelemetryDatagram(accel/9.81, euler, baro, timeLog, datas);
+      rf95.send(datas,sizeof(datas));
+      RF=0;
     }
   }
 
@@ -439,7 +440,7 @@ Serial.println("new loop");
   while (timeLog > flightLengthMs) {
     Serial.println("finito !");
     Blink_(BUZZER,50,1);
-    delay(200);/*
+    delay(200);
     while (Serial1.available() > 0){
       char c = Serial1.read();
       if (gps.encode(c))  {
@@ -453,7 +454,7 @@ Serial.println("new loop");
     double lng=gps.location.lng();
     double alt=gps.altitude.meters();
     CreateTelemetryDatagram_GPS(lat,lng,alt,timeLog,dataGPS);
-    rf95.send(dataGPS, GPS_PACKET_SIZE);*/
+    rf95.send(dataGPS, GPS_PACKET_SIZE);
     delay(200);
   }
 }
@@ -596,16 +597,22 @@ void setup_fileName(char* s, char ch){
 void setup_files() {
 
   setup_fileName(&(muonFileName[0]),'M'); //'M' for muons
-  setup_fileName(&(dataFileName[0]),'D'); //'D' for data
+  setup_fileName(&(dataFileName[0]),'T'); //'T' for telemetry
+  setup_fileName(&(gpsFileName[0]),'G'); //'G' for telemetry
+
 
   for (int seti=0;seti<100;seti=seti+1) { //check if the file already exists, if so increament
     if (SD.exists(muonFileName)) {
         increment_idx(&(setupIdx[0]));
         update_str(&(setupIdx[0]), &(muonFileName[1]));
         update_str(&(setupIdx[0]), &(dataFileName[1]));
+        update_str(&(setupIdx[0]), &(gpsFileName[1]));
         Serial.println(seti);
     }
   }
+
+  File setupFile = SD.open(gpsFileName, FILE_WRITE);
+  setupFile.close();
 
   for (int setj=0;setj<nbFiles;setj=setj+1) { //create all the files already
     File setupFile = SD.open(muonFileName, FILE_WRITE);
@@ -644,6 +651,49 @@ void update_str(int *idx, char* s) {
   for (int k=0; k<2; k=k+1) {
     *(s+k)=*(idx+1-k);
   }
+}
+
+void triggerAcquisition(void) {
+
+    //Calibration of the pressure sensor for the altimeter (every minute)
+
+    if (sincePrCalib >= calibPeriod) { //average the sum and transfer it to the test value every thresholdLength
+      sincePrCalib = sincePrCalib - calibPeriod; //decrement and adjust for latency
+      //sincePrCalib = 0; //decrement and adjust for latency
+      prevPr=currentPr;
+      currentPr=bme.readPressure();
+    }
+
+    //Trigger creation
+
+    Serial.println("tempAcc : ");
+    imu::Vector<3> accel=bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER); //total acceleration (gravity included)
+    float tempAcc= pow(accel[0],2)+pow(accel[1],2)+pow(accel[2],2); //summing the acceleration to create an agnostic accelerometer value
+    tempAcc= sqrt(tempAcc);
+    Serial.println(tempAcc);
+
+    sumAcc = sumAcc + tempAcc; //sum the current acceleration with the previous ones
+    nbAcc = nbAcc + 1; //increment the number of accelerations stored in sumAcc
+
+    if (sinceAccTest >= thresholdLength) { //average the sum and transfer it to the test value every thresholdLength
+      sinceAccTest = sinceAccTest - thresholdLength; //decrement and adjust for latency
+      testAcc = sumAcc / nbAcc; //perform the average
+      sumAcc = 0; //empty the buffer
+      nbAcc=0; //reinitialize the counter
+    }
+
+    Serial.println("testAcc : ");
+    Serial.println(testAcc);
+
+    if(testAcc>thresholdAcc || bme.readAltitude(prevPr/100)>thresholdAlt)//threshold on both the acceleration and altitude
+    {
+      liftoff=true;
+      liftoffPr=prevPr; //calibrate the pressure for the altimeter
+      Serial.println("liftoff!");
+    }
+
+  Serial.println("Setup end !");
+
 }
 
 void thresholdMuonCalc(uint16_t *tab, int *threshold) {
